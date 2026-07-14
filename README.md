@@ -19,7 +19,7 @@ Full two-app setup: see Local Music Hub repo → `docs/music-stack-setup.md`.
 
 - Single URLs, playlists, albums (YouTube Music)
 - MP3 / M4A / FLAC / Opus / WAV; cover art embed
-- Browser extension (load unpacked from `{app}\browser-extension`)
+- Browser extension — see **[friend setup guide](docs/browser-extension-friend-guide.md)** (load unpacked from the installed app folder)
 - History, parallel downloads, auto-import to Music Hub
 - **Auto-update check** via GitHub Releases
 
