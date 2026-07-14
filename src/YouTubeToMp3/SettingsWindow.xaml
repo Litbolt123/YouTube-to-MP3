@@ -169,6 +169,10 @@
                     <TextBlock Text="Updates (GitHub)" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
                     <CheckBox x:Name="AutoCheckBox" Style="{DynamicResource DashSimpleCheckBox}"
                               Content="Check for updates when the app starts"/>
+                    <CheckBox x:Name="NotifyTrayOnUpdateBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Show a tray notification when an update is available"/>
+                    <TextBlock Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="Checks GitHub Releases once each time you open the app. Use Download and run installer to upgrade (quit the app first)."/>
                     <TextBlock x:Name="UpdateStatusText" Style="{DynamicResource DashHintText}" Margin="0,0,0,10"/>
                     <WrapPanel Margin="0,0,0,12">
                         <Button Content="Check for updates…" Style="{DynamicResource DashToolbarButton}" Click="CheckUpdates_OnClick"/>

@@ -65,6 +65,9 @@ public sealed class AppSettings
 
     public bool AutoCheckUpdates { get; set; } = true;
 
+    /// <summary>Tray balloon when a newer GitHub release exists (startup check).</summary>
+    public bool NotifyTrayOnUpdate { get; set; } = true;
+
     /// <summary>Allow the browser extension to queue downloads via localhost.</summary>
     public bool BrowserExtensionEnabled { get; set; } = true;
 

@@ -126,6 +126,35 @@ public partial class MainWindow
             _tray.ShowTrayIcon();
             Hide();
         }
+
+        TryApplyCachedUpdate();
+    }
+
+    public void ApplyStartupUpdate(UpdateCheckResult result, bool showTrayBalloon)
+    {
+        ShowUpdateAvailable(result);
+        if (!showTrayBalloon)
+            return;
+
+        var url = !string.IsNullOrWhiteSpace(result.InstallerDownloadUrl)
+            ? result.InstallerDownloadUrl!
+            : UpdateCheckService.ReleasesPageUrl;
+        _tray.ShowUpdateAvailableBalloon(result.LatestVersion ?? "?", url);
+    }
+
+    private void TryApplyCachedUpdate()
+    {
+        if (!UpdateAvailabilityCache.HasPending)
+            return;
+
+        var version = UpdateAvailabilityCache.PendingVersion;
+        if (string.IsNullOrWhiteSpace(version))
+            return;
+
+        if (string.Equals(App.Settings.DismissedUpdateVersion, version, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        ShowUpdateAvailable(UpdateAvailabilityCache.ToResult());
     }
 
     private void SetupActivateSignalWatcher()
@@ -1212,6 +1241,7 @@ public partial class MainWindow
     public void ShowUpdateAvailable(UpdateCheckResult result)
     {
         _pendingUpdate = result;
+        UpdateAvailabilityCache.Set(result.LatestVersion, result.InstallerDownloadUrl);
         UpdateTitle.Text = $"Version {result.LatestVersion} is available";
         UpdateBody.Text = $"You are on {App.VersionDisplay}. Run the installer to update — your settings in {AppPaths.DataDirectory} are kept.";
         UpdateCard.Visibility = Visibility.Visible;

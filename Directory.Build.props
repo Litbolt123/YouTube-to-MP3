@@ -1,8 +1,8 @@
 ﻿<Project>
   <!-- Single source of truth for app + installer version. Bump with scripts\bump-version.ps1 (or edit here), then scripts\build-installer.ps1 -->
   <PropertyGroup>
-    <Version>1.9.8</Version>
-    <AssemblyVersion>1.9.8.0</AssemblyVersion>
-    <FileVersion>1.9.8.0</FileVersion>
+    <Version>1.9.9</Version>
+    <AssemblyVersion>1.9.9.0</AssemblyVersion>
+    <FileVersion>1.9.9.0</FileVersion>
   </PropertyGroup>
 </Project>

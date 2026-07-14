@@ -1,9 +1,10 @@
-## YouTube Downloader 1.9.8
+## YouTube Downloader 1.9.9
 
-### Distribution
-- **Bundled yt-dlp and ffmpeg** in the installer — friends can download without winget or PATH setup.
-- **GitHub Actions** builds `YouTubeToMp3-Setup-1.9.8.exe` on tag push (`v1.9.8`).
-- Updated first-run notice: tools are included; Deno remains optional for YouTube Music edge cases.
+### Updates (test this release)
+- WAID-style update checks: startup check ~12s after launch, optional tray balloon, update banner on main window.
+- Settings → **Updates (GitHub)**: auto-check on start, manual check, **Download and run installer**.
 
-### For maintainers
-- Bump `Directory.Build.props`, edit this file, commit, then `git tag v1.9.8 && git push origin v1.9.8`.
+### How to verify (if you are on 1.9.8)
+1. Open YouTube Downloader 1.9.8 (do not reinstall yet).
+2. Settings → Updates → **Check for updates** — should offer **1.9.9**.
+3. **Download and run installer**, or use the main-window update banner after restart.

@@ -55,6 +55,7 @@ public partial class SettingsWindow
         MusicHubStatusText.Text = LocalMusicHubIntegration.DescribeStatus(
             LocalMusicHubIntegration.GetLinkStatus(s.MusicOutputFolder));
         AutoCheckBox.IsChecked = s.AutoCheckUpdates;
+        NotifyTrayOnUpdateBox.IsChecked = s.NotifyTrayOnUpdate;
         AboutText.Text =
             $"Version {App.VersionDisplay}\n" +
             $"Settings: {AppPaths.DataDirectory}\n" +
@@ -131,10 +132,12 @@ public partial class SettingsWindow
         {
             UpdateStatusText.Text = $"Newer version available: {_lastCheck.LatestVersion} (you have {App.VersionDisplay}).";
             DownloadInstallerButton.IsEnabled = !string.IsNullOrWhiteSpace(_lastCheck.InstallerDownloadUrl);
+            UpdateAvailabilityCache.Set(_lastCheck.LatestVersion, _lastCheck.InstallerDownloadUrl);
         }
         else
         {
             UpdateStatusText.Text = $"You are up to date ({App.VersionDisplay}).";
+            UpdateAvailabilityCache.Clear();
         }
 
         App.Settings.LastUpdateCheckUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
@@ -323,6 +326,7 @@ public partial class SettingsWindow
             BrowserExtensionPort = ParseExtensionPort(),
             BrowserExtensionToken = ExtensionTokenBox.Text.Trim(),
             AutoCheckUpdates = AutoCheckBox.IsChecked == true,
+            NotifyTrayOnUpdate = NotifyTrayOnUpdateBox.IsChecked == true,
             AutoQueueWhenBusy = true,
             LastUpdateCheckUtc = App.Settings.LastUpdateCheckUtc,
             DismissedUpdateVersion = App.Settings.DismissedUpdateVersion,
