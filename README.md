@@ -2,6 +2,8 @@
 
 Download music and videos from YouTube to your PC — pairs with **Local Music Hub** for playback and library management.
 
+**License:** [Apache License 2.0](LICENSE)
+
 **Current version: 1.9.8**
 
 ## Install (friends)
