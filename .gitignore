@@ -1,0 +1,8 @@
+bin/
+obj/
+dist/
+installer/Output/
+installer/prereq/tools/
+*.user
+*.suo
+.vs/

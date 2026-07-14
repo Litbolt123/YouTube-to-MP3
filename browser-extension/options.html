@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>YouTube Downloader Bridge</title>
+  <style>
+    body {
+      font-family: Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #12151c;
+      color: #f2f4f8;
+      min-width: 360px;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0 0 8px;
+    }
+    p {
+      color: #b8c0cc;
+      line-height: 1.5;
+      margin: 0 0 16px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #d7dde7;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #2d3440;
+      border-radius: 8px;
+      background: #181c24;
+      color: #fff;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      background: #d32f2f;
+      color: #fff;
+      padding: 10px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #b71c1c;
+    }
+    #status {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #9aa3b2;
+      min-height: 1.2em;
+    }
+    ol {
+      padding-left: 20px;
+      color: #b8c0cc;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <h1>YouTube Downloader Bridge</h1>
+  <p>Connect this extension to the desktop app. Open <strong>Settings → Browser extension</strong> in YouTube Downloader to copy your token.</p>
+  <p style="font-size:12px;color:#8a93a3;">The service worker may show as &ldquo;inactive&rdquo; in <code>chrome://extensions</code> when idle. That is normal — it wakes automatically when you download or test the connection.</p>
+
+  <label for="port">Port</label>
+  <input id="port" type="number" min="1" max="65535" value="47384">
+
+  <label for="token">Connection token</label>
+  <input id="token" type="text" placeholder="Paste token from app settings">
+
+  <button id="save">Save</button>
+  <button id="test" type="button">Test connection</button>
+
+  <div id="status"></div>
+
+  <h2 style="font-size:15px;margin:20px 0 8px;">Install once</h2>
+  <ol>
+    <li>Keep the YouTube Downloader app running.</li>
+    <li>In Chrome/Edge: <code>chrome://extensions</code> → Developer mode → Load unpacked.</li>
+    <li>Select the <code>browser-extension</code> folder from the app (Settings → Open extension folder).</li>
+    <li>Paste the token above and save.</li>
+    <li>After updating the extension files, open <code>chrome://extensions</code> and click <strong>Reload</strong>.</li>
+  </ol>
+
+  <script src="api.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>YouTubeToMp3</AssemblyName>
+    <RootNamespace>YouTubeToMp3</RootNamespace>
+    <Product>YouTube Downloader</Product>
+    <Company>YouTube Downloader</Company>
+    <Copyright>Copyright (c) 2026</Copyright>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="app.ico" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <UpdateWindowsShortcuts Condition="'$(UpdateWindowsShortcuts)' == ''">true</UpdateWindowsShortcuts>
+  </PropertyGroup>
+
+  <Target Name="UpdateWindowsShortcutsAfterBuild"
+          AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release' and '$(UpdateWindowsShortcuts)' == 'true'">
+    <PropertyGroup>
+      <_ShortcutSourceDir>$([System.String]::Copy('$(TargetDir)').TrimEnd('\'))</_ShortcutSourceDir>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\scripts\update-windows-shortcuts.ps1&quot; -SourceDir &quot;$(_ShortcutSourceDir)&quot; -SkipProcessStop"
+          IgnoreExitCode="false" />
+  </Target>
+
+</Project>

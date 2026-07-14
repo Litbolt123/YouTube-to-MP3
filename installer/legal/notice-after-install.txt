@@ -1,0 +1,13 @@
+Thank you for installing YouTube Downloader.
+
+yt-dlp and ffmpeg are included with this install (in the app's tools folder). You can download right away — no winget step required.
+
+Optional for YouTube Music reliability in 2026:
+  winget install DenoLand.Deno -e
+Then restart the app.
+
+Browser extension: load the folder from {app}\browser-extension in Chrome/Edge (see Settings in the app).
+
+Pair with Local Music Hub for auto-import: install Local Music Hub, enable integration in both apps, and keep this app running when downloading.
+
+Your settings are stored under %LocalAppData%\YouTubeToMp3.

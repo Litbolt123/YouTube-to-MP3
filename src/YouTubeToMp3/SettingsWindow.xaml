@@ -1,0 +1,196 @@
+<Window x:Class="YouTubeToMp3.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings"
+        Height="760" Width="580"
+        MinWidth="520" MinHeight="640"
+        Background="{DynamicResource DashBgBrush}"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{DynamicResource DashCardBorder}" Padding="16">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Defaults" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+
+                    <TextBlock Text="Default save folder" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="FolderBox" Height="30" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0" IsReadOnly="True"/>
+                        <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Padding="12,6"
+                                Style="{DynamicResource DashToolbarButton}" Click="BrowseFolder_OnClick"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Default format" Width="120" Style="{DynamicResource DashSettingLabel}"/>
+                        <ComboBox x:Name="FormatCombo" Width="160" Style="{DynamicResource DashComboBox}"
+                                  DisplayMemberPath="Content" SelectionChanged="FormatCombo_OnSelectionChanged"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Default quality" Width="120" Style="{DynamicResource DashSettingLabel}"/>
+                        <ComboBox x:Name="QualityCombo" Width="220" Style="{DynamicResource DashComboBox}" DisplayMemberPath="Content"/>
+                    </StackPanel>
+
+                    <CheckBox x:Name="EmbedThumbnailBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Embed thumbnail as cover art by default"/>
+                    <CheckBox x:Name="AlwaysAskCoverArtBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Always ask to choose cover art before downloading"
+                              ToolTip="Opens the cover picker before each download when embed cover art is on. Useful for albums where some video thumbnails are wrong."/>
+                    <CheckBox x:Name="ReviewAlbumTracksBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Review album track details before downloading music playlists"
+                              ToolTip="Opens a track editor to confirm or fix artist, album, and title for each song before download."/>
+                    <CheckBox x:Name="ShowLogPanelBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,16"
+                              Content="Show download log on home screen"
+                              ToolTip="When off, use Show log on the status bar for a temporary peek."/>
+
+                    <Separator Margin="0,0,0,12"/>
+                    <TextBlock Text="Download paths" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+                    <TextBlock Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="Set custom full paths for each format. Leave blank to use the default save folder above. Subfolder names below still apply when enabled."/>
+                    <CheckBox x:Name="UseSubfoldersBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Also sort into Music / Videos subfolders inside those paths"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Music subfolder" Width="120" Style="{DynamicResource DashSettingLabel}"/>
+                        <TextBox x:Name="MusicSubfolderBox" Width="160" Height="30" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Videos subfolder" Width="120" Style="{DynamicResource DashSettingLabel}"/>
+                        <TextBox x:Name="VideosSubfolderBox" Width="160" Height="30" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"/>
+                    </StackPanel>
+
+                    <TextBlock Text="MP3 / audio downloads" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="MusicFolderBox" Height="30" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
+                                 ToolTip="Full path for MP3 downloads. Empty = default save folder."/>
+                        <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Padding="12,6"
+                                Style="{DynamicResource DashToolbarButton}" Click="BrowseMusicFolder_OnClick"/>
+                    </Grid>
+                    <TextBlock Text="MP4 / video downloads" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="VideosFolderBox" Height="30" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
+                                 ToolTip="Full path for MP4 downloads. Empty = default save folder."/>
+                        <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Padding="12,6"
+                                Style="{DynamicResource DashToolbarButton}" Click="BrowseVideosFolder_OnClick"/>
+                    </Grid>
+
+                    <Separator Margin="0,0,0,12"/>
+                    <TextBlock Text="Local API (extension &amp; Music Hub)" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+                    <CheckBox x:Name="BrowserExtensionBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Enable local download API (browser extension and Local Music Hub)"/>
+                    <TextBlock Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="Keep this app running. The browser extension and Local Music Hub use the same localhost API and token to queue downloads."/>
+                    <TextBlock x:Name="MusicHubStatusText" Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Port" Width="120" Style="{DynamicResource DashSettingLabel}" VerticalAlignment="Center"/>
+                        <TextBox x:Name="ExtensionPortBox" Width="80" Height="30" Style="{DynamicResource DashTextBox}"
+                                 VerticalContentAlignment="Center" Padding="8,0"/>
+                    </StackPanel>
+                    <TextBlock Text="Connection token" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="ExtensionTokenBox" Height="30" Style="{DynamicResource DashTextBox}"
+                                 VerticalContentAlignment="Center" Padding="8,0" IsReadOnly="True"/>
+                        <Button Grid.Column="1" Content="Copy" Margin="8,0,0,0" Padding="12,6"
+                                Style="{DynamicResource DashToolbarButton}" Click="CopyExtensionToken_OnClick"/>
+                        <Button Grid.Column="2" Content="New token" Margin="8,0,0,0" Padding="12,6"
+                                Style="{DynamicResource DashToolbarButton}" Click="RegenerateExtensionToken_OnClick"/>
+                    </Grid>
+                    <WrapPanel Margin="0,0,0,8">
+                        <Button Content="Open extension folder" Style="{DynamicResource DashToolbarButton}" Click="OpenExtensionFolder_OnClick"/>
+                        <Button Content="Open Music Hub data" Style="{DynamicResource DashToolbarButton}" Click="OpenMusicHubData_OnClick"/>
+                        <Button Content="Test connection" Style="{DynamicResource DashToolbarButton}" Click="TestExtension_OnClick"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="ExtensionStatusText" Style="{DynamicResource DashHintText}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+
+                    <Separator Margin="0,0,0,12"/>
+                    <TextBlock Text="Appearance" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+                    <CheckBox x:Name="DarkThemeBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Use dark theme"/>
+                    <CheckBox x:Name="MinimizeToTrayBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Minimize to system tray instead of closing"/>
+                    <CheckBox x:Name="StartWithWindowsBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Start with Windows (opens in system tray)"/>
+                    <CheckBox x:Name="NotifyQueueBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,16"
+                              Content="Notify when the whole queue finishes (tray)"/>
+
+                    <Separator Margin="0,0,0,12"/>
+                    <TextBlock Text="Downloads" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+                    <CheckBox x:Name="SkipAlreadyDownloadedBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Skip already-downloaded URLs (history / existing file)"
+                              ToolTip="When on, duplicates are skipped automatically. Uncheck or use force redownload to download again."/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Parallel downloads" Width="160" Style="{DynamicResource DashSettingLabel}" VerticalAlignment="Center"/>
+                        <TextBox x:Name="MaxParallelBox" Width="60" Height="30" Style="{DynamicResource DashTextBox}"
+                                 VerticalContentAlignment="Center" Padding="8,0"
+                                 ToolTip="Run up to N downloads/conversions at once (1–5)"/>
+                        <TextBlock Text="(1–5)" Margin="8,0,0,0" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Concurrent fragments" Width="160" Style="{DynamicResource DashSettingLabel}" VerticalAlignment="Center"/>
+                        <TextBox x:Name="ConcurrentFragmentsBox" Width="60" Height="30" Style="{DynamicResource DashTextBox}"
+                                 VerticalContentAlignment="Center" Padding="8,0"
+                                 ToolTip="Concurrent download fragments (1–8, higher can be faster). 1 disables."/>
+                        <TextBlock Text="(1–8)" Margin="8,0,0,0" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="Parallel downloads also run conversions/cover embeds at the same time (one yt-dlp job per slot). Concurrent fragments speed up a single file."/>
+                    <CheckBox x:Name="PlaySoundBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,16"
+                              Content="Play a sound when a download finishes"/>
+
+                    <Separator Margin="0,0,0,12"/>
+                    <TextBlock Text="Backup" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+                    <WrapPanel Margin="0,0,0,12">
+                        <Button Content="Export settings…" Style="{DynamicResource DashToolbarButton}" Click="ExportSettings_OnClick"/>
+                        <Button Content="Import settings…" Style="{DynamicResource DashToolbarButton}" Click="ImportSettings_OnClick"/>
+                    </WrapPanel>
+
+                    <Separator Margin="0,0,0,12"/>
+                    <TextBlock Text="Updates (GitHub)" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+                    <CheckBox x:Name="AutoCheckBox" Style="{DynamicResource DashSimpleCheckBox}"
+                              Content="Check for updates when the app starts"/>
+                    <TextBlock x:Name="UpdateStatusText" Style="{DynamicResource DashHintText}" Margin="0,0,0,10"/>
+                    <WrapPanel Margin="0,0,0,12">
+                        <Button Content="Check for updates…" Style="{DynamicResource DashToolbarButton}" Click="CheckUpdates_OnClick"/>
+                        <Button x:Name="DownloadInstallerButton" Content="Download and run installer…"
+                                Style="{DynamicResource DashToolbarButton}" Click="DownloadInstaller_OnClick" IsEnabled="False"/>
+                        <Button Content="Open releases page" Style="{DynamicResource DashToolbarButton}" Click="OpenReleases_OnClick"/>
+                    </WrapPanel>
+
+                    <Separator Margin="0,0,0,12"/>
+                    <TextBlock Text="About" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="AboutText" Style="{DynamicResource DashBodyText}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Border Grid.Row="1" Style="{DynamicResource DashCardBorder}" Padding="12" Margin="0,12,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Save" MinWidth="88" Padding="14,7" Margin="0,0,8,0"
+                        Style="{DynamicResource DashPrimaryButton}" IsDefault="True" Click="Save_OnClick"/>
+                <Button Content="Cancel" MinWidth="88" Padding="14,7"
+                        Style="{DynamicResource DashToolbarButton}" IsCancel="True" Click="Cancel_OnClick"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

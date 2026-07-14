@@ -1,0 +1,7 @@
+IMPORTANT — PLEASE READ BEFORE CONTINUING
+
+"YouTube to MP3" runs downloads locally on your PC using yt-dlp and ffmpeg. You are responsible for how you use it and for complying with applicable laws, including copyright and YouTube's terms of service.
+
+Only download content you have the right to save.
+
+If you do not agree, click Cancel and do not install.

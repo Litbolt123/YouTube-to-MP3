@@ -1,0 +1,16 @@
+YOUTUBE TO MP3 — TERMS OF USE AND SOFTWARE LICENSE
+(Terms version 1 — installer skips this page on update until this version changes.)
+
+1. Grant of use
+You may install and run this software for personal purposes on your own devices.
+
+2. Third-party tools
+This application invokes yt-dlp and ffmpeg, which you must install separately. Their use is subject to their own licenses and terms.
+
+3. No warranty
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+
+4. Limitation of liability
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM USE OF THE SOFTWARE.
+
+By choosing "I accept the agreement" below you agree to these terms.

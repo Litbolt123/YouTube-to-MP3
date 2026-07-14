@@ -1,0 +1,26 @@
+<Window x:Class="YouTubeToMp3.PlaylistKindPromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Playlist type"
+        SizeToContent="WidthAndHeight"
+        MinWidth="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource DashBgBrush}">
+    <Border Style="{DynamicResource DashCardBorder}" Padding="20" Margin="12">
+        <StackPanel>
+            <TextBlock Text="How should this playlist be treated?" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,8"/>
+            <TextBlock x:Name="PlaylistTitleText" Style="{DynamicResource DashBodyText}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+            <TextBlock Style="{DynamicResource DashHintText}" TextWrapping="Wrap" Margin="0,0,0,16"
+                       Text="Music album — MP3 with artist/album folders and optional track review.&#x0a;Video playlist — saves each item as a video in a playlist folder."/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancel" Padding="14,8" Margin="0,0,8,0"
+                        Style="{DynamicResource DashToolbarButton}" IsCancel="True"/>
+                <Button Content="Video playlist" Padding="14,8" Margin="0,0,8,0"
+                        Style="{DynamicResource DashToolbarButton}" Click="VideoPlaylist_OnClick"/>
+                <Button Content="Music album" Padding="16,8"
+                        Style="{DynamicResource DashPrimaryButton}" IsDefault="True" Click="MusicAlbum_OnClick"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

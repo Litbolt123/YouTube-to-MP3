@@ -1,0 +1,312 @@
+<Window x:Class="YouTubeToMp3.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="YouTube Downloader"
+        Height="820" Width="920"
+        MinHeight="520" MinWidth="760"
+        Background="{DynamicResource DashBgBrush}"
+        WindowStartupLocation="CenterScreen"
+        Closing="MainWindow_OnClosing"
+        PreviewKeyDown="MainWindow_OnPreviewKeyDown">
+    <Grid Margin="18,14,18,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="YouTube Downloader" FontSize="22" FontWeight="SemiBold"
+                           Foreground="{DynamicResource DashTextPrimaryBrush}"/>
+                <TextBlock Text="Audio &amp; video — MP3, MP4, FLAC, and more"
+                           FontSize="12" Foreground="{DynamicResource DashTextMutedBrush}" Margin="0,1,0,0"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="Queue" Style="{DynamicResource DashToolbarButton}" Click="Queue_OnClick"/>
+                <Button Content="History" Style="{DynamicResource DashToolbarButton}" Click="History_OnClick"/>
+                <Button Content="Settings…" Style="{DynamicResource DashToolbarButton}" Click="Settings_OnClick"/>
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      CanContentScroll="False"
+                      PanningMode="VerticalOnly">
+            <StackPanel>
+                <Border x:Name="UpdateCard" Style="{DynamicResource DashCardBorder}" Padding="12" Margin="0,0,0,10" Visibility="Collapsed">
+                    <Grid>
+                        <StackPanel>
+                            <TextBlock Text="Update available" FontSize="11" Foreground="{DynamicResource DashAccentBrush}"/>
+                            <TextBlock x:Name="UpdateTitle" Style="{DynamicResource DashSectionTitle}" Margin="0,2,0,4"/>
+                            <TextBlock x:Name="UpdateBody" Style="{DynamicResource DashBodyText}" Margin="0,0,0,8"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                            <Button Content="Later" Padding="10,5" Margin="0,0,8,0"
+                                    Style="{DynamicResource DashToolbarButton}" Click="UpdateLater_OnClick"/>
+                            <Button Content="Open download" Padding="12,5"
+                                    Style="{DynamicResource DashPrimaryButton}" Click="UpdateDownload_OnClick"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Primary: URL, options, preview -->
+                <Border Style="{DynamicResource DashCardBorder}" Padding="14,12" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="Download" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,8"/>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="UrlBox" MinHeight="44" MaxHeight="88" AcceptsReturn="True"
+                                     Style="{DynamicResource DashTextBox}"
+                                     VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" Padding="8,6"
+                                     ToolTip="Paste one or more YouTube URLs (one per line)" TextChanged="UrlBox_OnTextChanged"/>
+                            <Button Grid.Column="1" Content="Paste" Margin="8,0,0,0" Padding="12,6" VerticalAlignment="Top"
+                                    Style="{DynamicResource DashToolbarButton}" Click="Paste_OnClick"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="FolderBox" Height="28" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0" IsReadOnly="True"
+                                     TextChanged="FolderBox_OnTextChanged"/>
+                            <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Padding="10,5"
+                                    Style="{DynamicResource DashToolbarButton}" Click="BrowseFolder_OnClick"/>
+                        </Grid>
+
+                        <WrapPanel Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,16,4">
+                                <TextBlock Text="Content" VerticalAlignment="Center" Margin="0,0,6,0"
+                                           Foreground="{DynamicResource DashTextMutedBrush}" FontSize="12"/>
+                                <ComboBox x:Name="ContentKindCombo" Width="88" Style="{DynamicResource DashComboBox}" VerticalAlignment="Center"
+                                          DisplayMemberPath="Content"
+                                          SelectionChanged="ContentKindCombo_OnSelectionChanged">
+                                    <ComboBoxItem Content="Auto" Tag="auto" IsSelected="True"/>
+                                    <ComboBoxItem Content="Music" Tag="music"/>
+                                    <ComboBoxItem Content="Video" Tag="video"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,16,4">
+                                <TextBlock Text="Format" VerticalAlignment="Center" Margin="0,0,6,0"
+                                           Foreground="{DynamicResource DashTextMutedBrush}" FontSize="12"/>
+                                <ComboBox x:Name="FormatCombo" Width="120" Style="{DynamicResource DashComboBox}" VerticalAlignment="Center"
+                                          DisplayMemberPath="Content" SelectionChanged="FormatCombo_OnSelectionChanged"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock x:Name="QualityLabel" Text="Quality" VerticalAlignment="Center" Margin="0,0,6,0"
+                                           Foreground="{DynamicResource DashTextMutedBrush}" FontSize="12"/>
+                                <ComboBox x:Name="QualityCombo" Width="160" Style="{DynamicResource DashComboBox}"
+                                          DisplayMemberPath="Content" VerticalAlignment="Center"
+                                          SelectionChanged="QualityCombo_OnSelectionChanged"/>
+                            </StackPanel>
+                        </WrapPanel>
+
+                        <TextBlock x:Name="ContentHintText" Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap" FontSize="12"/>
+
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="72"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="72" Height="72" CornerRadius="6"
+                                    Background="{DynamicResource DashMetricBgBrush}" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="CoverPreviewPlaceholder" Text="Cover"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Style="{DynamicResource DashHintText}" TextAlignment="Center" FontSize="11"/>
+                                    <Image x:Name="CoverPreviewImage" Stretch="Uniform"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="Filename preview" Style="{DynamicResource DashHintText}" Margin="0,0,0,3" FontSize="11"/>
+                                <TextBox x:Name="FilenamePreviewBox" Height="28" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
+                                         ToolTip="Edit before downloading (single URL, single video only)" TextChanged="FilenamePreviewBox_OnTextChanged"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Expander x:Name="CoverOptionsExpander" Style="{DynamicResource DashExpander}" Margin="0,0,0,4" IsExpanded="False">
+                            <Expander.Header>
+                                <TextBlock Text="Cover art options" Foreground="{DynamicResource DashTextPrimaryBrush}" FontSize="12"/>
+                            </Expander.Header>
+                            <StackPanel Margin="0,6,0,0">
+                                <CheckBox x:Name="EmbedThumbnailBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,6"
+                                          Content="Embed thumbnail as cover art"
+                                          Checked="EmbedThumbnailBox_OnChanged"
+                                          Unchecked="EmbedThumbnailBox_OnChanged"/>
+                                <WrapPanel Margin="0,0,0,6">
+                                    <Button x:Name="ChooseCoverArtButton" Content="Choose cover…" Padding="10,5" Margin="0,0,8,0"
+                                            Style="{DynamicResource DashToolbarButton}" Click="ChooseCoverArt_OnClick"/>
+                                    <TextBlock x:Name="CoverArtStatusText" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"
+                                               Text="Cover: video default" FontSize="11"/>
+                                </WrapPanel>
+                                <TextBox x:Name="CoverUrlBox" Height="28" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center"
+                                         Padding="8,0"
+                                         ToolTip="Paste a YouTube URL for cover art"
+                                         TextChanged="CoverUrlBox_OnTextChanged"/>
+                            </StackPanel>
+                        </Expander>
+
+                        <WrapPanel Margin="0,2,0,0">
+                            <CheckBox x:Name="SkipAlreadyDownloadedBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,14,0"
+                                      Content="Skip already downloaded"
+                                      Checked="SkipAlreadyDownloadedBox_OnChanged"
+                                      Unchecked="SkipAlreadyDownloadedBox_OnChanged"/>
+                            <CheckBox x:Name="AddToQueueBox" Style="{DynamicResource DashSimpleCheckBox}"
+                                      Content="Add to queue"
+                                      ToolTip="Queue downloads instead of starting immediately"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Actions: detection-aware download buttons -->
+                <Border Style="{DynamicResource DashCardBorder}" Padding="14,12" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="Actions" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+                        <WrapPanel>
+                            <Button x:Name="DownloadVideoButton" Content="This video only" Padding="18,10" Margin="0,0,8,8"
+                                    Style="{DynamicResource DashPrimaryButton}" Click="DownloadVideo_OnClick"/>
+                            <Button x:Name="DownloadPlaylistButton" Content="Whole playlist" Padding="18,10" Margin="0,0,8,8"
+                                    Style="{DynamicResource DashPrimaryButton}" Click="DownloadPlaylist_OnClick"/>
+                            <Button x:Name="ReviewAlbumButton" Content="Review album…" Padding="14,10" Margin="0,0,8,8"
+                                    Style="{DynamicResource DashToolbarButton}" Click="ReviewAlbum_OnClick"/>
+                        </WrapPanel>
+                        <WrapPanel>
+                            <Button x:Name="CancelButton" Content="Cancel" Padding="12,6" Margin="0,0,8,0" IsEnabled="False"
+                                    Style="{DynamicResource DashToolbarButton}" Click="Cancel_OnClick"/>
+                            <Button x:Name="PauseQueueButton" Content="Pause queue" Padding="12,6" Margin="0,0,8,0"
+                                    Style="{DynamicResource DashToolbarButton}" Click="PauseQueue_OnClick"/>
+                            <Button Content="Open folder" Padding="12,6" Margin="0,0,8,0"
+                                    Style="{DynamicResource DashToolbarButton}" Click="OpenFolder_OnClick"/>
+                            <Button Content="Logs folder" Padding="12,6"
+                                    Style="{DynamicResource DashToolbarButton}" Click="OpenLogsFolder_OnClick"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Status -->
+                <Border Style="{DynamicResource DashCardBorder}" Padding="12,10" Margin="0,0,0,10">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock x:Name="StatusText" Style="{DynamicResource DashBodyText}" Text="Ready." TextWrapping="Wrap"/>
+                            <Button x:Name="ToggleLogButton" Content="Show log" Padding="8,3" HorizontalAlignment="Right"
+                                    Style="{DynamicResource DashToolbarButton}" Click="ToggleLog_OnClick"/>
+                        </Grid>
+                        <ProgressBar x:Name="ProgressBar" Height="6" Margin="0,6,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+                        <Grid x:Name="DownloadMetricsPanel" Margin="0,8,0,0" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="72"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="72" Height="72" CornerRadius="6" Margin="0,0,8,0"
+                                    Background="{DynamicResource DashMetricBgBrush}" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="DownloadCoverPlaceholder" Text="Cover"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Style="{DynamicResource DashHintText}" TextAlignment="Center" FontSize="11"/>
+                                    <Image x:Name="DownloadCoverImage" Stretch="Uniform"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            <UniformGrid Grid.Column="1" Columns="3">
+                                <Border Style="{DynamicResource DashCardBorder}" Padding="8" Margin="0,0,6,0"
+                                        Background="{DynamicResource DashMetricBgBrush}">
+                                    <StackPanel>
+                                        <TextBlock Text="Now" Style="{DynamicResource DashHintText}" FontSize="11"/>
+                                        <TextBlock x:Name="MetricTrackText" Style="{DynamicResource DashBodyText}" FontWeight="SemiBold"
+                                                   Margin="0,2,0,0" TextWrapping="Wrap" Text="—" FontSize="12"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{DynamicResource DashCardBorder}" Padding="8" Margin="0,0,6,0"
+                                        Background="{DynamicResource DashMetricBgBrush}">
+                                    <StackPanel>
+                                        <TextBlock Text="File ETA" Style="{DynamicResource DashHintText}" FontSize="11"/>
+                                        <TextBlock x:Name="MetricFileEtaText" Style="{DynamicResource DashBodyText}" FontWeight="SemiBold"
+                                                   Margin="0,2,0,0" Text="—" FontSize="12"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{DynamicResource DashCardBorder}" Padding="8"
+                                        Background="{DynamicResource DashMetricBgBrush}">
+                                    <StackPanel>
+                                        <TextBlock Text="Queue ETA" Style="{DynamicResource DashHintText}" FontSize="11"/>
+                                        <TextBlock x:Name="MetricQueueEtaText" Style="{DynamicResource DashBodyText}" FontWeight="SemiBold"
+                                                   Margin="0,2,0,0" Text="—" FontSize="12"/>
+                                    </StackPanel>
+                                </Border>
+                            </UniformGrid>
+                        </Grid>
+                        <TextBlock x:Name="DonePathText" Style="{DynamicResource DashBodyText}" Margin="0,6,0,0"
+                                   TextWrapping="Wrap" Visibility="Collapsed" Foreground="{DynamicResource DashAccentBrush}"/>
+                        <WrapPanel x:Name="DoneActions" Margin="0,4,0,0" Visibility="Collapsed">
+                            <Button Content="Open saved location" Padding="10,5" Margin="0,0,8,8"
+                                    Style="{DynamicResource DashPrimaryButton}" Click="OpenLastSaved_OnClick"/>
+                            <Button x:Name="ImportToMusicHubButton" Content="Import to Music Hub" Padding="10,5" Margin="0,0,8,8"
+                                    Style="{DynamicResource DashPrimaryButton}" Click="ImportToMusicHub_OnClick"
+                                    Visibility="Collapsed"/>
+                            <Button Content="Open containing folder" Padding="10,5" Margin="0,0,0,8"
+                                    Style="{DynamicResource DashToolbarButton}" Click="OpenLastFolder_OnClick"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="QueueCard" Style="{DynamicResource DashCardBorder}" Padding="12,10" Margin="0,0,0,10" Visibility="Collapsed">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="Queue" Style="{DynamicResource DashSectionTitle}"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock x:Name="QueueCountText" Style="{DynamicResource DashHintText}" Margin="0,0,10,0" FontSize="11"/>
+                                <Button Content="Open queue" Padding="8,4" Style="{DynamicResource DashToolbarButton}" Click="Queue_OnClick"/>
+                            </StackPanel>
+                        </Grid>
+                        <ListBox x:Name="QueueList" MaxHeight="96" Margin="0,0,0,6"
+                                 AllowDrop="True"
+                                 PreviewMouseLeftButtonDown="QueueList_PreviewMouseLeftButtonDown"
+                                 MouseMove="QueueList_MouseMove"
+                                 DragOver="QueueList_DragOver"
+                                 Drop="QueueList_Drop">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding QueueLabel}" TextWrapping="Wrap"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <WrapPanel>
+                            <Button Content="Move up" Padding="10,5" Margin="0,0,6,0"
+                                    Style="{DynamicResource DashToolbarButton}" Click="MoveQueueUp_OnClick"/>
+                            <Button Content="Move down" Padding="10,5" Margin="0,0,6,0"
+                                    Style="{DynamicResource DashToolbarButton}" Click="MoveQueueDown_OnClick"/>
+                            <Button Content="Remove" Padding="10,5" Margin="0,0,6,0"
+                                    Style="{DynamicResource DashToolbarButton}" Click="RemoveQueueItem_OnClick"/>
+                            <Button Content="Clear" Padding="10,5"
+                                    Style="{DynamicResource DashToolbarButton}" Click="ClearQueue_OnClick"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="LogCard" Style="{DynamicResource DashCardBorder}" Padding="12" Margin="0,0,0,4" Visibility="Collapsed">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <TextBlock Text="Log" Style="{DynamicResource DashSectionTitle}"/>
+                            <TextBlock x:Name="LogPathHint" Style="{DynamicResource DashHintText}" FontSize="11"
+                                       Text="Session log is saved when a download starts."/>
+                        </StackPanel>
+                        <TextBox x:Name="LogBox" IsReadOnly="True" Style="{DynamicResource DashTextBox}" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                 MinHeight="120" MaxHeight="200"
+                                 FontFamily="Consolas" FontSize="11" Background="{DynamicResource DashMetricBgBrush}"
+                                 BorderBrush="{DynamicResource DashBorderBrush}" BorderThickness="1" Padding="8"/>
+                    </DockPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>
