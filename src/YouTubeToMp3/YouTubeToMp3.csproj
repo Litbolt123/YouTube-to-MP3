@@ -27,7 +27,7 @@
 
   <Target Name="UpdateWindowsShortcutsAfterBuild"
           AfterTargets="Build"
-          Condition="'$(Configuration)' == 'Release' and '$(UpdateWindowsShortcuts)' == 'true'">
+          Condition="'$(Configuration)' == 'Release' and '$(UpdateWindowsShortcuts)' == 'true' and '$(GITHUB_ACTIONS)' != 'true'">
     <PropertyGroup>
       <_ShortcutSourceDir>$([System.String]::Copy('$(TargetDir)').TrimEnd('\'))</_ShortcutSourceDir>
     </PropertyGroup>
