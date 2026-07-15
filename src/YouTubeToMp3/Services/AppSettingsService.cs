@@ -34,6 +34,9 @@ public sealed class AppSettings
     /// <summary>Show the download log panel on the home screen.</summary>
     public bool ShowLogPanel { get; set; }
 
+    /// <summary>Show explanatory tips on the main download screen.</summary>
+    public bool ShowMainScreenHints { get; set; } = true;
+
     /// <summary>Save music and videos under separate subfolders.</summary>
     public bool UseContentSubfolders { get; set; } = true;
 

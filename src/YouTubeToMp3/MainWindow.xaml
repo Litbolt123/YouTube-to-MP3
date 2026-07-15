@@ -26,6 +26,10 @@
                            FontSize="12" Foreground="{DynamicResource DashTextMutedBrush}" Margin="0,1,0,0"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <CheckBox x:Name="ShowTipsBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,12,0"
+                          VerticalAlignment="Center" Content="Show tips"
+                          ToolTip="Short explanations for each part of this screen"
+                          Checked="ShowTipsBox_OnChanged" Unchecked="ShowTipsBox_OnChanged"/>
                 <Button Content="Queue" Style="{DynamicResource DashToolbarButton}" Click="Queue_OnClick"/>
                 <Button Content="History" Style="{DynamicResource DashToolbarButton}" Click="History_OnClick"/>
                 <Button Content="Settings…" Style="{DynamicResource DashToolbarButton}" Click="Settings_OnClick"/>
@@ -57,7 +61,13 @@
                 <!-- Primary: URL, options, preview -->
                 <Border Style="{DynamicResource DashCardBorder}" Padding="14,12" Margin="0,0,0,10">
                     <StackPanel>
-                        <TextBlock Text="Download" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Download" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="DownloadSectionHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,10" TextWrapping="Wrap"
+                                   Text="Paste a YouTube link, choose where files go and which format to use, then start from Actions below."/>
+
+                        <TextBlock Text="YouTube URL" Style="{DynamicResource DashSettingLabel}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="UrlFieldHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,6" TextWrapping="Wrap"
+                                   Text="One link per line — single videos, playlists, and YouTube Music albums. Use Paste or type directly."/>
                         <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -71,6 +81,9 @@
                                     Style="{DynamicResource DashToolbarButton}" Click="Paste_OnClick"/>
                         </Grid>
 
+                        <TextBlock Text="Save folder" Style="{DynamicResource DashSettingLabel}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="SaveFolderHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,6" TextWrapping="Wrap"
+                                   Text="Downloaded files land here. Music and video can use different folders — set defaults in Settings."/>
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -82,6 +95,9 @@
                                     Style="{DynamicResource DashToolbarButton}" Click="BrowseFolder_OnClick"/>
                         </Grid>
 
+                        <TextBlock Text="Options" Style="{DynamicResource DashSettingLabel}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="OptionsHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,6" TextWrapping="Wrap"
+                                   Text="Content picks music vs video storage. Format and quality apply to the next download. Auto detects from the link when possible."/>
                         <WrapPanel Margin="0,0,0,6">
                             <StackPanel Orientation="Horizontal" Margin="0,0,16,4">
                                 <TextBlock Text="Content" VerticalAlignment="Center" Margin="0,0,6,0"
@@ -128,7 +144,9 @@
                                 </Grid>
                             </Border>
                             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="Filename preview" Style="{DynamicResource DashHintText}" Margin="0,0,0,3" FontSize="11"/>
+                                <TextBlock Text="Filename preview" Style="{DynamicResource DashSettingLabel}" Margin="0,0,0,3"/>
+                                <TextBlock x:Name="PreviewHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,4" TextWrapping="Wrap" FontSize="11"
+                                           Text="Edit the name before downloading (single video only)."/>
                                 <TextBox x:Name="FilenamePreviewBox" Height="28" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
                                          ToolTip="Edit before downloading (single URL, single video only)" TextChanged="FilenamePreviewBox_OnTextChanged"/>
                             </StackPanel>
@@ -165,13 +183,19 @@
                                       Content="Add to queue"
                                       ToolTip="Queue downloads instead of starting immediately"/>
                         </WrapPanel>
+                        <TextBlock x:Name="DownloadOptionsHint" Style="{DynamicResource DashHintText}" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="11"
+                                   Text="Skip already downloaded avoids duplicates from history. Add to queue lines up several links before you start."/>
                     </StackPanel>
                 </Border>
 
                 <!-- Actions: detection-aware download buttons -->
                 <Border Style="{DynamicResource DashCardBorder}" Padding="14,12" Margin="0,0,0,10">
                     <StackPanel>
-                        <TextBlock Text="Actions" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
+                        <TextBlock Text="Actions" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="ActionsSectionHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
+                                   Text="Start a download. The main buttons change based on your link (single video, playlist, or album)."/>
+                        <TextBlock x:Name="ActionsDetailHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,10" TextWrapping="Wrap" FontSize="11"
+                                   Text="This video only — one track. Whole playlist — every video in the list. Review album — choose tracks before a YouTube Music album download."/>
                         <WrapPanel>
                             <Button x:Name="DownloadVideoButton" Content="This video only" Padding="18,10" Margin="0,0,8,8"
                                     Style="{DynamicResource DashPrimaryButton}" Click="DownloadVideo_OnClick"/>
@@ -190,12 +214,17 @@
                             <Button Content="Logs folder" Padding="12,6"
                                     Style="{DynamicResource DashToolbarButton}" Click="OpenLogsFolder_OnClick"/>
                         </WrapPanel>
+                        <TextBlock x:Name="ActionsUtilityHint" Style="{DynamicResource DashHintText}" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="11"
+                                   Text="Cancel stops the active job. Pause queue holds the rest. Open folder opens your save location; Logs folder shows technical output."/>
                     </StackPanel>
                 </Border>
 
                 <!-- Status -->
                 <Border Style="{DynamicResource DashCardBorder}" Padding="12,10" Margin="0,0,0,10">
                     <StackPanel>
+                        <TextBlock Text="Status" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="StatusSectionHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
+                                   Text="Progress while downloading. When finished, open the file or import into Local Music Hub if you use it."/>
                         <Grid Margin="0,0,0,4">
                             <TextBlock x:Name="StatusText" Style="{DynamicResource DashBodyText}" Text="Ready." TextWrapping="Wrap"/>
                             <Button x:Name="ToggleLogButton" Content="Show log" Padding="8,3" HorizontalAlignment="Right"
@@ -261,13 +290,15 @@
 
                 <Border x:Name="QueueCard" Style="{DynamicResource DashCardBorder}" Padding="12,10" Margin="0,0,0,10" Visibility="Collapsed">
                     <StackPanel>
-                        <Grid Margin="0,0,0,6">
+                        <Grid Margin="0,0,0,4">
                             <TextBlock Text="Queue" Style="{DynamicResource DashSectionTitle}"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <TextBlock x:Name="QueueCountText" Style="{DynamicResource DashHintText}" Margin="0,0,10,0" FontSize="11"/>
                                 <Button Content="Open queue" Padding="8,4" Style="{DynamicResource DashToolbarButton}" Click="Queue_OnClick"/>
                             </StackPanel>
                         </Grid>
+                        <TextBlock x:Name="QueueSectionHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
+                                   Text="Downloads waiting to start. Drag to reorder, or use the buttons below. Open queue for a larger view."/>
                         <ListBox x:Name="QueueList" MaxHeight="96" Margin="0,0,0,6"
                                  AllowDrop="True"
                                  PreviewMouseLeftButtonDown="QueueList_PreviewMouseLeftButtonDown"
@@ -297,7 +328,9 @@
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
                             <TextBlock Text="Log" Style="{DynamicResource DashSectionTitle}"/>
-                            <TextBlock x:Name="LogPathHint" Style="{DynamicResource DashHintText}" FontSize="11"
+                            <TextBlock x:Name="LogSectionHint" Style="{DynamicResource DashHintText}" FontSize="11" TextWrapping="Wrap"
+                                       Text="Technical output from yt-dlp and ffmpeg. Useful when a download fails — also saved to your logs folder."/>
+                            <TextBlock x:Name="LogPathHint" Style="{DynamicResource DashHintText}" FontSize="11" Margin="0,4,0,0"
                                        Text="Session log is saved when a download starts."/>
                         </StackPanel>
                         <TextBox x:Name="LogBox" IsReadOnly="True" Style="{DynamicResource DashTextBox}" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"

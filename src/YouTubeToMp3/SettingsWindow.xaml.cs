@@ -34,6 +34,7 @@ public partial class SettingsWindow
         AlwaysAskCoverArtBox.IsChecked = s.AlwaysAskCoverArt;
         ReviewAlbumTracksBox.IsChecked = s.ReviewAlbumTracksBeforeDownload;
         ShowLogPanelBox.IsChecked = s.ShowLogPanel;
+        ShowMainScreenHintsBox.IsChecked = s.ShowMainScreenHints;
         UseSubfoldersBox.IsChecked = s.UseContentSubfolders;
         MusicSubfolderBox.Text = s.MusicSubfolder;
         VideosSubfolderBox.Text = s.VideosSubfolder;
@@ -225,6 +226,22 @@ public partial class SettingsWindow
         }
     }
 
+    private void OpenExtensionGuide_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = UpdateCheckService.ExtensionSetupGuideUrl,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Extension setup guide", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void OpenMusicHubData_OnClick(object sender, RoutedEventArgs e)
     {
         try
@@ -311,6 +328,7 @@ public partial class SettingsWindow
             AlwaysAskCoverArt = AlwaysAskCoverArtBox.IsChecked == true,
             ReviewAlbumTracksBeforeDownload = ReviewAlbumTracksBox.IsChecked == true,
             ShowLogPanel = ShowLogPanelBox.IsChecked == true,
+            ShowMainScreenHints = ShowMainScreenHintsBox.IsChecked == true,
             UseContentSubfolders = UseSubfoldersBox.IsChecked == true,
             MusicSubfolder = string.IsNullOrWhiteSpace(MusicSubfolderBox.Text) ? "Youtube Music" : MusicSubfolderBox.Text.Trim(),
             VideosSubfolder = string.IsNullOrWhiteSpace(VideosSubfolderBox.Text) ? "Youtube Videos" : VideosSubfolderBox.Text.Trim(),

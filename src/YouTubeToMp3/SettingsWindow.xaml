@@ -118,6 +118,7 @@
                     </Grid>
                     <WrapPanel Margin="0,0,0,8">
                         <Button Content="Open extension folder" Style="{DynamicResource DashToolbarButton}" Click="OpenExtensionFolder_OnClick"/>
+                        <Button Content="Extension setup guide" Style="{DynamicResource DashToolbarButton}" Click="OpenExtensionGuide_OnClick"/>
                         <Button Content="Open Music Hub data" Style="{DynamicResource DashToolbarButton}" Click="OpenMusicHubData_OnClick"/>
                         <Button Content="Test connection" Style="{DynamicResource DashToolbarButton}" Click="TestExtension_OnClick"/>
                     </WrapPanel>
@@ -127,6 +128,8 @@
                     <TextBlock Text="Appearance" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
                     <CheckBox x:Name="DarkThemeBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
                               Content="Use dark theme"/>
+                    <CheckBox x:Name="ShowMainScreenHintsBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Show tips on the main screen"/>
                     <CheckBox x:Name="MinimizeToTrayBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
                               Content="Minimize to system tray instead of closing"/>
                     <CheckBox x:Name="StartWithWindowsBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"

@@ -1,10 +1,14 @@
-## YouTube Downloader 1.9.9
+## YouTube Downloader 2.0.0
 
-### Updates (test this release)
-- WAID-style update checks: startup check ~12s after launch, optional tray balloon, update banner on main window.
-- Settings → **Updates (GitHub)**: auto-check on start, manual check, **Download and run installer**.
+### Highlights
+- Main screen tips: labeled sections, hideable hints, Show tips checkbox, Settings appearance toggle (default on).
+- Browser extension: friend-friendly setup guide (docs/browser-extension-setup.md).
+- Updates: GitHub release checks, tray notification, main-window update banner.
 
-### How to verify (if you are on 1.9.8)
-1. Open YouTube Downloader 1.9.8 (do not reinstall yet).
-2. Settings → Updates → **Check for updates** — should offer **1.9.9**.
-3. **Download and run installer**, or use the main-window update banner after restart.
+### Install
+Download YouTubeToMp3-Setup-2.0.0.exe below. Settings in LocalAppData/YouTubeToMp3 are preserved.
+
+### Verify
+1. Settings About shows 2.0.0.
+2. Toggle Show tips on the main screen.
+3. Settings Updates reports up to date after install.

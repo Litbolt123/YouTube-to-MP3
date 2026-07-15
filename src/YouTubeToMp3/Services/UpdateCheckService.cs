@@ -34,6 +34,9 @@ public static class UpdateCheckService
 
     public static string ReleasesPageUrl => $"https://github.com/{GitHubRepo}/releases";
 
+    public static string ExtensionSetupGuideUrl =>
+        $"https://github.com/{GitHubRepo}/blob/main/docs/browser-extension-friend-guide.md";
+
     public static Version CurrentAssemblyVersion =>
         Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
 

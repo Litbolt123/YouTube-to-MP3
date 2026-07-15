@@ -5,6 +5,11 @@
 - **`move_agent_to_root` does not work** here — never call it. Use absolute paths under `GitHub projects\` for YouTube Downloader or Local Music Hub.
 - **Release builds** auto-sync to `%LocalAppData%\Programs\YouTubeToMp3\` and refresh Start Menu / Desktop shortcuts (`scripts\update-windows-shortcuts.ps1`).
 
+## 2026-07-14 — Main screen tips + local rebuild (v1.9.9)
+
+- **Main screen:** Labeled sections with hideable hint text; **Show tips** checkbox in header; Settings → Appearance **Show tips on the main screen** (`ShowMainScreenHints`, default on).
+- **Local rebuild:** `scripts\build-installer.ps1` succeeded after closing a running instance (robocopy exit 11 = locked files). Installer: `installer\Output\YouTubeToMp3-Setup-1.9.9.exe` (152.4 MB). Installed copy synced to `%LocalAppData%\Programs\YouTubeToMp3\`.
+
 ## 2026-07-14 — Single-instance app (v1.9.7)
 
 - Only one **YouTube Downloader** process can run; a second launch brings the existing window forward.
@@ -371,3 +376,8 @@
 - **youtu.be links:** `TryGetVideoId` now parses `youtu.be/VIDEO_ID` (and `/shorts/`, `/embed/`) so thumbnails, previews, and IDs work on short links.
 - **Auto music detection:** URLs with both a video and playlist id (`youtu.be/VID?list=PL…`) auto-detect as **Music** (album track links). Playlist-only URLs probe the playlist title for OST/soundtrack/album keywords (e.g. Stardew Valley OST).
 - **Cover preview:** Loads in parallel with filename preview; expands short URLs; for detected music playlists tries playlist artwork first, then the linked track thumbnail.
+
+
+## 2026-07-14 - Publish v2.0.0
+
+- Version 2.0.0 in Directory.Build.props and installer/version.inc; RELEASE_BODY.md for CI.

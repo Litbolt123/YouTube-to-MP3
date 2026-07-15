@@ -77,6 +77,7 @@ public partial class MainWindow
     private string? _lastCoverVideoUrl;
     private bool _logPeekVisible;
     private bool _logForceHidden;
+    private bool _applyingShowTips;
     private FileSystemWatcher? _activateSignalWatcher;
 
     private bool IsProcessing => _activeDownloads.Count > 0;
@@ -120,6 +121,8 @@ public partial class MainWindow
         BrowserExtensionInstaller.EnsureInstalled();
         _extensionHost.ApplySettings(App.Settings);
         SetupActivateSignalWatcher();
+        SyncShowTipsCheckbox();
+        ApplyMainScreenHintsVisibility();
 
         if (_startMinimizedToTray || (App.Settings.StartWithWindows && AutoStartService.ArgsRequestTray(Environment.GetCommandLineArgs())))
         {
@@ -632,6 +635,57 @@ public partial class MainWindow
         if (!App.Settings.ShowLogPanel)
             _logPeekVisible = false;
         RefreshLogPanelVisibility();
+        SyncShowTipsCheckbox();
+        ApplyMainScreenHintsVisibility();
+    }
+
+    private void SyncShowTipsCheckbox()
+    {
+        _applyingShowTips = true;
+        ShowTipsBox.IsChecked = App.Settings.ShowMainScreenHints;
+        _applyingShowTips = false;
+    }
+
+    private void ApplyMainScreenHintsVisibility()
+    {
+        var show = App.Settings.ShowMainScreenHints;
+        var tipVisibility = show ? Visibility.Visible : Visibility.Collapsed;
+
+        DownloadSectionHint.Visibility = tipVisibility;
+        UrlFieldHint.Visibility = tipVisibility;
+        SaveFolderHint.Visibility = tipVisibility;
+        OptionsHint.Visibility = tipVisibility;
+        PreviewHint.Visibility = tipVisibility;
+        DownloadOptionsHint.Visibility = tipVisibility;
+        ActionsSectionHint.Visibility = tipVisibility;
+        ActionsDetailHint.Visibility = tipVisibility;
+        ActionsUtilityHint.Visibility = tipVisibility;
+        StatusSectionHint.Visibility = tipVisibility;
+        QueueSectionHint.Visibility = tipVisibility;
+        LogSectionHint.Visibility = tipVisibility;
+
+        if (!show && string.IsNullOrWhiteSpace(UrlBox.Text))
+        {
+            ContentHintText.Visibility = Visibility.Collapsed;
+            ContentHintText.Text = "";
+        }
+        else
+        {
+            ContentHintText.Visibility = Visibility.Visible;
+            if (string.IsNullOrWhiteSpace(UrlBox.Text) && show)
+                ContentHintText.Text = "Paste a URL to see where files will be saved.";
+        }
+    }
+
+    private void ShowTipsBox_OnChanged(object sender, RoutedEventArgs e)
+    {
+        if (_applyingShowTips)
+            return;
+
+        App.Settings.ShowMainScreenHints = ShowTipsBox.IsChecked == true;
+        App.SaveSettings();
+        ApplyMainScreenHintsVisibility();
+        UpdateContentHint();
     }
 
     private bool IsLogPanelVisible()
@@ -1092,10 +1146,21 @@ public partial class MainWindow
         var url = urls.FirstOrDefault() ?? "";
         if (string.IsNullOrWhiteSpace(url))
         {
-            ContentHintText.Text = "Paste a URL to see where files will be saved.";
+            if (App.Settings.ShowMainScreenHints)
+            {
+                ContentHintText.Visibility = Visibility.Visible;
+                ContentHintText.Text = "Paste a URL to see where files will be saved.";
+            }
+            else
+            {
+                ContentHintText.Visibility = Visibility.Collapsed;
+                ContentHintText.Text = "";
+            }
+
             return;
         }
 
+        ContentHintText.Visibility = Visibility.Visible;
         var chosen = GetSelectedContentKind();
         var format = GetSelectedFormat();
         var namingKind = ContentKindDetector.Resolve(chosen, url);
