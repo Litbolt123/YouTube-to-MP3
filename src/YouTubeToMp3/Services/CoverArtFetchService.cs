@@ -29,6 +29,8 @@ public static class CoverArtFetchService
         Directory.CreateDirectory(tempDir);
         var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
         var outTemplate = Path.Combine(tempDir, $"cover-{stamp}.%(ext)s");
+        var playlistOnly = scope == DownloadScope.Playlist;
+        var playlistArg = playlistOnly ? "" : "--no-playlist ";
 
         try
         {
@@ -38,7 +40,7 @@ public static class CoverArtFetchService
                 {
                     FileName = tools.YtDlpPath,
                     Arguments =
-                        $"--no-playlist --skip-download --write-thumbnail --convert-thumbnails jpg " +
+                        $"{playlistArg}--skip-download --write-thumbnail --convert-thumbnails jpg " +
                         $"-o \"{outTemplate}\" \"{url}\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,

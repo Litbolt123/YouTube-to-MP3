@@ -9,6 +9,8 @@ public static class AppPaths
 
     public static string LogsDirectory => Path.Combine(DataDirectory, "logs");
 
+    public static string StagingDirectory => Path.Combine(DataDirectory, "staging");
+
     public static string HistoryPath => Path.Combine(DataDirectory, "history.json");
 
     public static string DownloadArchivePath => Path.Combine(DataDirectory, "download-archive.txt");

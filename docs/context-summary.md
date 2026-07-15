@@ -8,7 +8,10 @@
 ## 2026-07-14 — Main screen tips + local rebuild (v1.9.9)
 
 - **Main screen:** Labeled sections with hideable hint text; **Show tips** checkbox in header; Settings → Appearance **Show tips on the main screen** (`ShowMainScreenHints`, default on).
-- **Local rebuild:** `scripts\build-installer.ps1` succeeded after closing a running instance (robocopy exit 11 = locked files). Installer: `installer\Output\YouTubeToMp3-Setup-1.9.9.exe` (152.4 MB). Installed copy synced to `%LocalAppData%\Programs\YouTubeToMp3\`.
+- **Local rebuild:** `scripts\build-installer.ps1` succeeded after closing a running instance (robocopy exit 11 = locked files). Installer: `installer\Output\YouTubeToMp3-Setup-2.0.0.exe` (152.5 MB). Installed copy synced to `%LocalAppData%\Programs\YouTubeToMp3\`.
+- **Audio quality:** Best MP3 uses AAC source + 320k LAME (no resample/dither filters); cover art embedded with stream copy (no second MP3 re-encode).
+- **Download history:** **History** toolbar button opens past downloads grouped by date (Today, Yesterday, This week, Last week, month names, etc.). Albums/playlists show as one row; singles per track.
+- **Playlist discovery:** Track-only links (`youtu.be/VID` without `?list=`) are probed via yt-dlp; when an album/playlist is found the URL is enriched and album buttons appear.
 
 ## 2026-07-14 — Single-instance app (v1.9.7)
 
@@ -381,3 +384,49 @@
 ## 2026-07-14 - Publish v2.0.0
 
 - Version 2.0.0 in Directory.Build.props and installer/version.inc; RELEASE_BODY.md for CI.
+
+## 2026-07-15 — Audio crackle fix (Opus source + ffmpeg filters)
+
+- **Symptom:** Bass crackle on downloaded MP3 and FLAC (e.g. Minecraft C418 Alpha), but clean playback on YouTube Music in browser.
+- **Root cause:** "Best" quality used `bestaudio/best`, which picks Opus (webm format 251). Opus→PCM→FLAC/MP3 transcode plus forced SoXR resample/dither/headroom filters in `--postprocessor-args FFmpegExtractAudio` introduced bass artifacts. YouTube Music plays Opus natively without re-encoding.
+- **Fix (`AudioExtractArgs.cs`):**
+  - All re-encode formats (MP3, FLAC, WAV, M4A) now use `bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio` — prefer AAC source.
+  - Native Opus downloads still select Opus stream when output format is Opus.
+  - Removed SoXR resample/dither/headroom postprocessor args for FLAC/WAV and other non-MP3 formats (clean ffmpeg decode→encode).
+  - MP3: simplified to direct LAME encode from AAC source (320k CBR at Best; no audio filters).
+- **Test:** Re-download C418 "Minecraft" from Alpha album as FLAC and MP3 (Best quality); compare bass to YouTube Music.
+
+## 2026-07-15 — FLAC treble crackle fix (Opus source + s32 PCM)
+
+- **Symptom:** Faint treble/high crackle remained on FLAC after AAC-preference fix (bass crackle was fixed).
+- **Format probe (C418 Alpha `q6o7qpPHd7g`):** android_vr exposes both **140** (m4a AAC 128k) and **251** (Opus webm). AAC-preference logs show format 140; earlier logs picked 251. YouTube Music plays Opus natively.
+- **Root cause:** AAC 128k → FLAC preserves lossy treble quantization (sounds like faint crackle on highs). Prior Opus→FLAC bass crackle was from SoXR/dither filters, not Opus itself.
+- **Fix (`AudioExtractArgs.cs`, `QualityPresets.cs`):**
+  - FLAC/WAV now prefer **Opus** source (`bestaudio[acodec=opus]/…`) — higher bitrate, matches YT Music.
+  - MP3/M4A still prefer AAC/M4A source.
+  - FLAC postprocessor: `ffmpeg_o:-c:a flac -compression_level 8 -sample_fmt s32` (no resample/dither).
+  - WAV postprocessor: `pcm_s24le`; FLAC forces `--audio-quality 0`.
+- **Cover embed:** confirmed `-c copy` for FLAC (no re-encode).
+- **Test:** Re-download C418 Alpha as FLAC (Best); log should show format **251** then ExtractAudio with s32 FLAC args.
+
+## 2026-07-15 — FLAC Opus revert + cover embed fix
+
+- Opus→FLAC (format 251) reintroduced worse crackle vs AAC→FLAC (format 140). Reverted FLAC/WAV to AAC-first selector; removed custom FLAC ffmpeg postprocessor args.
+- AAC selector now prefers higher bitrate when available (`abr>=256/192`).
+- FLAC/WAV downloads probe `ios` client for better AAC streams.
+- FLAC cover embed now maps audio stream only (`-map 0:a:0 -c:a copy`) to avoid remux glitches.
+- For YouTube Music parity without transcode artifacts, use **Opus** output format (native download).
+
+**User confirmed (2026-07-15):** AAC-first FLAC path sounds much better; Opus→FLAC reverted successfully.
+
+## 2026-07-15 — Playlist FLAC cover embed fix
+
+- Whole-playlist jobs with partial 403 failures exited non-zero; post-processing skipped cover embed + commit for all tracks.
+- Now treats partial success (any staged media) as success: embed cover into every staged FLAC/MP3, then commit.
+- Embed targets = log-tracked files ∪ staging scan (all completed tracks).
+- Playlist thumbnail fetch no longer passes `--no-playlist` for playlist-only URLs.
+- Cover embed failure no longer discards completed audio files.
+
+- **Root cause:** yt-dlp metadata step writes `*.temp.flac` then renames to `.flac` in the music library folder. Local Music Hub’s folder watcher can open the file during that window, causing `[WinError 5] Access is denied`.
+- **Fix (YouTube Downloader):** Downloads now stage under `%LocalAppData%\YouTubeToMp3\staging\{session}\` via `DownloadStagingService`; finished files move to the library only after yt-dlp + optional cover embed complete. Added `--force-overwrites` and clearer WinError 5 messaging.
+- **Fix (Local Music Hub, local):** `YouTubeDownloaderBridge` and `LibraryFolderWatcher` ignore `*.temp.*`, `*.part`, and `*.ytdl` artifacts.

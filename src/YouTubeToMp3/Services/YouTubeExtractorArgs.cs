@@ -17,6 +17,9 @@ public static class YouTubeExtractorArgs
         if (YouTubeUrlHelper.IsMusicAlbumOrPlaylist(url))
             return "web_music,android_vr,tv_simply,default";
 
+        if (format is DownloadFormat.Flac or DownloadFormat.Wav)
+            return "ios,android_vr,tv_simply,web_safari,default,web_music";
+
         return DownloadFormats.IsVideo(format)
             ? "android_vr,tv_simply,tv,web_safari,default"
             : "android_vr,tv_simply,default,web_music";

@@ -1,6 +1,7 @@
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.Windows;
+using System.Windows.Data;
 using YouTubeToMp3.Services;
 using MessageBox = System.Windows.MessageBox;
 
@@ -23,9 +24,14 @@ public partial class HistoryWindow
 
     private void RefreshList()
     {
-        HistoryList.ItemsSource = _history.Entries
-            .Select(e => new HistoryRow(e))
-            .ToList();
+        var rows = DownloadHistoryViewBuilder.Build(_history.Entries).ToList();
+
+        var view = new ListCollectionView(rows);
+        view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(DownloadHistoryViewBuilder.HistoryDisplayItem.GroupLabel)));
+        view.SortDescriptions.Add(new SortDescription(nameof(DownloadHistoryViewBuilder.HistoryDisplayItem.GroupOrder), ListSortDirection.Ascending));
+        view.SortDescriptions.Add(new SortDescription(nameof(DownloadHistoryViewBuilder.HistoryDisplayItem.CompletedAt), ListSortDirection.Descending));
+
+        HistoryList.ItemsSource = view;
         UpdateImportButton();
     }
 
@@ -38,6 +44,11 @@ public partial class HistoryWindow
         ImportToMusicHubButton.Visibility = entry is not null && LocalMusicHubIntegration.CanImportHistoryEntry(entry)
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+        if (entry is not null && entry.IsCollection)
+            ImportToMusicHubButton.Content = "Import album to Music Hub";
+        else
+            ImportToMusicHubButton.Content = "Import to Music Hub";
     }
 
     private void ImportToMusicHub_OnClick(object sender, RoutedEventArgs e)
@@ -46,7 +57,11 @@ public partial class HistoryWindow
         if (entry is null)
             return;
 
-        var result = LocalMusicHubIntegration.RequestImport(entry.OutputPath);
+        var path = entry.OutputPath;
+        var result = entry.IsCollection && Directory.Exists(path)
+            ? LocalMusicHubIntegration.RequestImportAlbum(path)
+            : LocalMusicHubIntegration.RequestImport(path);
+
         MessageBox.Show(this, result.Message, "Local Music Hub",
             MessageBoxButton.OK,
             result.Ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
@@ -54,9 +69,9 @@ public partial class HistoryWindow
 
     private DownloadHistoryEntry? GetSelectedEntry()
     {
-        if (HistoryList.SelectedItem is not HistoryRow row)
+        if (HistoryList.SelectedItem is not DownloadHistoryViewBuilder.HistoryDisplayItem row)
             return null;
-        return _history.Entries.FirstOrDefault(e => e.Id == row.Id);
+        return row.Entry;
     }
 
     private void OpenFile_OnClick(object sender, RoutedEventArgs e)
@@ -64,6 +79,12 @@ public partial class HistoryWindow
         var entry = GetSelectedEntry();
         if (entry is null)
             return;
+
+        if (entry.IsCollection)
+        {
+            OpenFolderPath(entry);
+            return;
+        }
 
         if (File.Exists(entry.OutputPath))
             OpenPath(entry.OutputPath);
@@ -77,9 +98,16 @@ public partial class HistoryWindow
         if (entry is null)
             return;
 
-        var folder = File.Exists(entry.OutputPath)
-            ? Path.GetDirectoryName(entry.OutputPath)
-            : entry.OutputFolder;
+        OpenFolderPath(entry);
+    }
+
+    private void OpenFolderPath(DownloadHistoryEntry entry)
+    {
+        var folder = entry.IsCollection && Directory.Exists(entry.OutputPath)
+            ? entry.OutputPath
+            : File.Exists(entry.OutputPath)
+                ? Path.GetDirectoryName(entry.OutputPath)
+                : entry.OutputFolder;
 
         if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
             OpenPath(folder);
@@ -109,25 +137,5 @@ public partial class HistoryWindow
         {
             /* ignore */
         }
-    }
-
-    private sealed class HistoryRow
-    {
-        public HistoryRow(DownloadHistoryEntry entry)
-        {
-            Id = entry.Id;
-            Title = string.IsNullOrWhiteSpace(entry.Title) ? entry.Url : entry.Title;
-            OutputPath = entry.OutputPath;
-            TypeDisplay = $"{entry.ContentKind} · {entry.Format.ToUpperInvariant()}";
-            DateDisplay = DateTime.TryParse(entry.CompletedUtc, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt)
-                ? dt.ToLocalTime().ToString("g")
-                : entry.CompletedUtc;
-        }
-
-        public string Id { get; }
-        public string Title { get; }
-        public string OutputPath { get; }
-        public string TypeDisplay { get; }
-        public string DateDisplay { get; }
     }
 }

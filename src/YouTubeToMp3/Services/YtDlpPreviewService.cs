@@ -130,7 +130,7 @@ public static class YtDlpPreviewService
             sb.Append("--parse-metadata \"+%(album)s:%(playlist_title)s\" ");
 
         if (DownloadFormats.IsAudio(format))
-            sb.Append($"-f bestaudio/best -x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} ");
+            sb.Append($"-f {QualityPresets.BestAudioFormatSelector} -x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} ");
         else
             sb.Append("-f best ");
 

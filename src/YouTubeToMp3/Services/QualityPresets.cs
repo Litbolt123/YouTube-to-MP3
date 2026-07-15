@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Windows.Controls;
 using ComboBox = System.Windows.Controls.ComboBox;
 
@@ -27,9 +28,12 @@ public static class QualityPresets
                 ("Smaller file", 9),
             };
 
-    // Prefer M4A/AAC audio for Windows Media Player compatibility (bestaudio alone often picks Opus).
+    // Prefer highest-bitrate M4A/AAC when available; Opus decode via ffmpeg adds crackle on FLAC/MP3.
     private const string AacAudio =
-        "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio";
+        "bestaudio[ext=m4a][abr>=256]/bestaudio[ext=m4a][abr>=192]/bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio";
+
+    /// <summary>Prefer AAC/M4A for all transcodes (MP3/FLAC/WAV/M4A).</summary>
+    public const string BestAudioFormatSelector = AacAudio;
 
     // YouTube serves 1080p+ as VP9/AV1 (webm), not native mp4. Height caps only; ffmpeg remuxes via --merge-output-format mp4.
     public static string GetMp4FormatSelector(int quality) => quality switch
@@ -96,4 +100,8 @@ public static class QualityPresets
 
         return quality == 0 ? "Best" : quality.ToString(CultureInfo.InvariantCulture);
     }
+
+    /// <summary>yt-dlp args for audio download/extract (format, extract, optional anti-clip filter).</summary>
+    public static void AppendAudioExtractArgs(StringBuilder sb, DownloadFormat format, int audioQuality) =>
+        AudioExtractArgs.Append(sb, format, audioQuality);
 }

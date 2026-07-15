@@ -12,6 +12,8 @@ public static class PlaylistKindResolver
 {
     public static UrlDownloadContext GetDownloadContext(string url, ContentKind chosen)
     {
+        url = PlaylistDiscoveryService.GetEffectiveUrl(url);
+
         if (YouTubeUrlHelper.TryGetListId(url) is null)
             return UrlDownloadContext.SingleTrack;
 
@@ -33,6 +35,8 @@ public static class PlaylistKindResolver
 
     public static bool IsAmbiguousPlaylist(string url)
     {
+        url = PlaylistDiscoveryService.GetEffectiveUrl(url);
+
         if (YouTubeUrlHelper.TryGetListId(url) is null)
             return false;
 
@@ -45,5 +49,5 @@ public static class PlaylistKindResolver
         return ContentKindDetector.TryGetCachedPlaylistKind(url) is null;
     }
 
-    public static bool HasPlaylist(string url) => YouTubeUrlHelper.TryGetListId(url) is not null;
+    public static bool HasPlaylist(string url) => PlaylistDiscoveryService.HasPlaylistContext(url);
 }

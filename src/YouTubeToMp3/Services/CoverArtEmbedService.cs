@@ -110,6 +110,14 @@ public static class CoverArtEmbedService
                    $"-metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" {outQ}";
         }
 
+        if (string.Equals(ext, ".flac", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ext, ".wav", StringComparison.OrdinalIgnoreCase))
+        {
+            // Copy audio only — mapping all of input 0 can remux picture streams and glitch playback.
+            return $"-y -i {mediaQ} -i {coverQ} -map 0:a:0 -map 1:0 -c:a copy -c:v mjpeg " +
+                   $"-disposition:v:1 attached_pic -metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" {outQ}";
+        }
+
         // m4a / mp4 / others: attach as video stream disposition
         return $"-y -i {mediaQ} -i {coverQ} -map 0 -map 1 -c copy -disposition:v:0 attached_pic " +
                $"-metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" {outQ}";

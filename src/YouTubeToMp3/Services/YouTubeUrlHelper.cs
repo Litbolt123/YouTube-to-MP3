@@ -72,7 +72,30 @@ public static class YouTubeUrlHelper
         var listId = TryGetListId(url);
         return string.IsNullOrWhiteSpace(listId)
             ? null
+            : BuildPlaylistUrl(listId);
+    }
+
+    public static string BuildPlaylistUrl(string listId)
+    {
+        return listId.StartsWith("OLAK5uy_", StringComparison.OrdinalIgnoreCase)
+            ? $"https://music.youtube.com/playlist?list={listId}"
             : $"https://www.youtube.com/playlist?list={listId}";
+    }
+
+    public static string AttachListId(string url, string listId)
+    {
+        var videoId = TryGetVideoId(url);
+        var isMusic = listId.StartsWith("OLAK5uy_", StringComparison.OrdinalIgnoreCase) ||
+                      IsMusicAlbumOrPlaylist(url);
+
+        if (!string.IsNullOrWhiteSpace(videoId))
+        {
+            return isMusic
+                ? $"https://music.youtube.com/watch?v={videoId}&list={listId}"
+                : $"https://www.youtube.com/watch?v={videoId}&list={listId}";
+        }
+
+        return BuildPlaylistUrl(listId);
     }
 
     public static string BuildTrackUrl(string sourceUrl, string videoId)

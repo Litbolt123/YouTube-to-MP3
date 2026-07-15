@@ -88,11 +88,12 @@ public sealed class YtDlpDownloadService : IDisposable
             throw new InvalidOperationException($"Missing: {tools.MissingSummary}. {ToolDependencyService.InstallHint}");
 
         Directory.CreateDirectory(outputFolder);
+        var stagingDir = DownloadStagingService.CreateSessionDirectory();
         url = YouTubeUrlHelper.Normalize(url, scope);
         var useCustomCover = !string.IsNullOrWhiteSpace(customCoverArtPath) && File.Exists(customCoverArtPath);
         var embedYtThumbnail = embedThumbnail && !useCustomCover;
         var outputTemplate = await OutputTemplateBuilder.ResolveAsync(
-            outputFolder,
+            stagingDir,
             scope,
             contentKind,
             format,
@@ -179,6 +180,7 @@ public sealed class YtDlpDownloadService : IDisposable
                 /* ignore */
             }
 
+            DownloadStagingService.TryDeleteStagingDirectory(stagingDir);
             Completed?.Invoke(this, new DownloadCompletedEventArgs
             {
                 Success = false,
@@ -196,31 +198,89 @@ public sealed class YtDlpDownloadService : IDisposable
         var success = _process.ExitCode == 0;
         var combined = string.Join(Environment.NewLine, allLines);
         var destMatch = DestinationRegex.Match(combined);
-        var outputFile = destMatch.Success ? destMatch.Groups[1].Value.Trim() : outputFolder;
+        var stagingOutputFile = destMatch.Success ? destMatch.Groups[1].Value.Trim() : stagingDir;
+        var stagedMedia = DownloadStagingService.ListMediaFiles(stagingDir);
+        var partialSuccess = !success && stagedMedia.Count > 0;
+        if (partialSuccess)
+            success = true;
+
+        var outputFile = stagedMedia.Count > 0
+            ? DownloadStagingService.MapToFinalPath(stagingDir, outputFolder, stagedMedia[^1])
+            : DownloadStagingService.MapToFinalPath(stagingDir, outputFolder, stagingOutputFile);
+
+        if (!success)
+        {
+            DownloadStagingService.TryDeleteStagingDirectory(stagingDir);
+            Completed?.Invoke(this, new DownloadCompletedEventArgs
+            {
+                Success = false,
+                ExitCode = _process.ExitCode,
+                OutputPath = outputFile,
+                ErrorMessage = BuildErrorMessage(stderr, _process.ExitCode),
+                Format = format,
+                Scope = scope,
+                ContentKind = contentKind,
+                OutputFolder = outputFolder,
+            });
+            return;
+        }
+
+        string? partialWarning = partialSuccess
+            ? "Some playlist items failed to download; saved the tracks that completed."
+            : null;
 
         string? coverError = null;
-        if (success && useCustomCover)
+        if (useCustomCover || embedYtThumbnail)
         {
             try
             {
                 Progress?.Invoke(this, new DownloadProgressEventArgs
                 {
-                    Line = "Embedding custom cover art…",
-                    Status = "Embedding custom cover art…",
+                    Line = useCustomCover ? "Embedding custom cover art…" : "Embedding cover art…",
+                    Status = useCustomCover ? "Embedding custom cover art…" : "Embedding cover art…",
                 });
 
                 var targets = writtenFiles
+                    .Where(p => !DownloadStagingService.IsIncompleteArtifact(p))
                     .Where(CoverArtEmbedService.IsEmbeddableMedia)
+                    .Concat(stagedMedia)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
-                if (targets.Count == 0 && CoverArtEmbedService.IsEmbeddableMedia(outputFile))
-                    targets.Add(outputFile);
+                if (targets.Count == 0 && CoverArtEmbedService.IsEmbeddableMedia(stagingOutputFile))
+                    targets.Add(stagingOutputFile);
 
-                await CoverArtEmbedService.EmbedIntoManyAsync(targets, customCoverArtPath!, _cts.Token)
-                    .ConfigureAwait(false);
+                if (targets.Count == 0)
+                    throw new InvalidOperationException("No completed audio files found to embed cover art into.");
+
+                string? coverPath = customCoverArtPath;
+                if (!useCustomCover)
+                {
+                    var thumbUrl = scope == DownloadScope.Playlist
+                        ? url
+                        : YouTubeUrlHelper.ExpandToWatchUrl(url);
+                    var (fetched, fetchError) = await CoverArtFetchService.FetchThumbnailFromUrlAsync(thumbUrl, _cts.Token)
+                        .ConfigureAwait(false);
+                    if (fetched is null)
+                        throw new InvalidOperationException(fetchError ?? "Could not fetch thumbnail.");
+                    coverPath = fetched;
+                }
+
+                var embedded = 0;
+                foreach (var target in targets)
+                {
+                    _cts.Token.ThrowIfCancellationRequested();
+                    await CoverArtEmbedService.EmbedAsync(target, coverPath!, _cts.Token).ConfigureAwait(false);
+                    embedded++;
+                    Progress?.Invoke(this, new DownloadProgressEventArgs
+                    {
+                        Line = $"Embedding cover art ({embedded}/{targets.Count})…",
+                        Status = $"Embedding cover art ({embedded}/{targets.Count})…",
+                    });
+                }
             }
             catch (OperationCanceledException)
             {
+                DownloadStagingService.TryDeleteStagingDirectory(stagingDir);
                 Completed?.Invoke(this, new DownloadCompletedEventArgs
                 {
                     Success = false,
@@ -237,18 +297,39 @@ public sealed class YtDlpDownloadService : IDisposable
             catch (Exception ex)
             {
                 coverError = ex.Message;
-                success = false;
             }
+        }
+
+        IReadOnlyList<string> committedFiles = [];
+        string? commitError = null;
+        if (success)
+        {
+            try
+            {
+                committedFiles = DownloadStagingService.CommitAll(stagingDir, outputFolder);
+                if (committedFiles.Count > 0)
+                    outputFile = committedFiles[^1];
+            }
+            catch (IOException ex)
+            {
+                commitError = ex.Message;
+                success = false;
+                DownloadStagingService.TryDeleteStagingDirectory(stagingDir);
+            }
+        }
+        else
+        {
+            DownloadStagingService.TryDeleteStagingDirectory(stagingDir);
         }
 
         Completed?.Invoke(this, new DownloadCompletedEventArgs
         {
             Success = success,
-            ExitCode = coverError is null ? _process.ExitCode : -2,
+            ExitCode = coverError is null && commitError is null ? _process.ExitCode : -2,
             OutputPath = outputFile,
             ErrorMessage = success
-                ? null
-                : coverError ?? BuildErrorMessage(stderr, _process.ExitCode),
+                ? JoinWarnings(partialWarning, coverError)
+                : commitError ?? coverError ?? BuildErrorMessage(stderr, _process.ExitCode),
             Format = format,
             Scope = scope,
             ContentKind = contentKind,
@@ -285,7 +366,7 @@ public sealed class YtDlpDownloadService : IDisposable
         bool useDownloadArchive)
     {
         var sb = new StringBuilder();
-        sb.Append("--newline --progress --ignore-errors ");
+        sb.Append("--newline --progress --ignore-errors --force-overwrites ");
         sb.Append("--output-na-placeholder \"\" ");
         sb.Append("--embed-metadata ");
         AppendMetadataOverrides(sb, metadataOverride);
@@ -328,8 +409,7 @@ public sealed class YtDlpDownloadService : IDisposable
 
         if (DownloadFormats.IsAudio(format))
         {
-            sb.Append("-f bestaudio/best ");
-            sb.Append($"-x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} --audio-quality {audioQuality} ");
+            QualityPresets.AppendAudioExtractArgs(sb, format, audioQuality);
         }
         else
         {
@@ -340,7 +420,7 @@ public sealed class YtDlpDownloadService : IDisposable
             sb.Append("--postprocessor-args \"Merger+ffmpeg_o:-c:a aac -b:a 192k\" ");
         }
 
-        if (embedThumbnail)
+        if (embedThumbnail && DownloadFormats.IsVideo(format))
         {
             sb.Append("--embed-thumbnail --convert-thumbnails jpg ");
         }
@@ -381,6 +461,13 @@ public sealed class YtDlpDownloadService : IDisposable
         YouTubeExtractorArgs.Append(sb, tools, url, format);
     }
 
+    private static string? JoinWarnings(params string?[] parts)
+    {
+        var joined = string.Join(Environment.NewLine,
+            parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()));
+        return string.IsNullOrWhiteSpace(joined) ? null : joined;
+    }
+
     private static string BuildErrorMessage(IReadOnlyList<string> stderr, int exitCode)
     {
         var last = stderr.LastOrDefault() ?? $"yt-dlp exited with code {exitCode}.";
@@ -395,6 +482,13 @@ public sealed class YtDlpDownloadService : IDisposable
             combined.Contains("Requested format is not available", StringComparison.OrdinalIgnoreCase))
         {
             return last + Environment.NewLine + Environment.NewLine + ToolDependencyService.YouTubeMusicFormatHint;
+        }
+
+        if (combined.Contains("Access is denied", StringComparison.OrdinalIgnoreCase) ||
+            combined.Contains("WinError 5", StringComparison.OrdinalIgnoreCase))
+        {
+            return last + Environment.NewLine + Environment.NewLine +
+                   "The file could not be saved. Close Local Music Hub or any app playing the track, then try again.";
         }
 
         return last;

@@ -78,6 +78,7 @@ public partial class MainWindow
     private bool _logPeekVisible;
     private bool _logForceHidden;
     private bool _applyingShowTips;
+    private bool _enrichingUrlFromDiscovery;
     private FileSystemWatcher? _activateSignalWatcher;
 
     private bool IsProcessing => _activeDownloads.Count > 0;
@@ -792,7 +793,7 @@ public partial class MainWindow
 
     private void UrlBox_OnTextChanged(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded)
+        if (!IsLoaded || _enrichingUrlFromDiscovery)
             return;
 
         ResetCoverArtIfUrlChanged();
@@ -955,28 +956,85 @@ public partial class MainWindow
             return;
 
         var url = urls[0];
-        if (YouTubeUrlHelper.TryGetListId(url) is null)
-            return;
-
-        if (YouTubeUrlHelper.TryGetVideoId(url) is not null)
-            return;
-
         var token = _previewCts?.Token ?? CancellationToken.None;
+
         try
         {
-            var playlistUrl = YouTubeUrlHelper.TryGetPlaylistUrl(url);
-            if (playlistUrl is null)
+            if (YouTubeUrlHelper.TryGetListId(url) is not null)
+            {
+                if (YouTubeUrlHelper.TryGetVideoId(url) is not null)
+                    return;
+
+                var playlistUrl = YouTubeUrlHelper.TryGetPlaylistUrl(url);
+                if (playlistUrl is null)
+                    return;
+
+                var title = await YtDlpMetadataService.GetPlaylistTitleAsync(playlistUrl, token).ConfigureAwait(true);
+                if (token.IsCancellationRequested)
+                    return;
+
+                var kind = MusicPlaylistHeuristics.LooksLikeMusic(title) ? ContentKind.Music : ContentKind.Video;
+                ContentKindDetector.CachePlaylistKind(url, kind);
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    if (token.IsCancellationRequested)
+                        return;
+                    UpdateContentHint();
+                    ApplySmartFormatDefaults();
+                    UpdateDownloadActionsUi();
+                });
+                return;
+            }
+
+            if (YouTubeUrlHelper.TryGetVideoId(url) is null)
                 return;
 
-            var title = await YtDlpMetadataService.GetPlaylistTitleAsync(playlistUrl, token).ConfigureAwait(true);
-            if (token.IsCancellationRequested)
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (!token.IsCancellationRequested && !IsProcessing)
+                    StatusText.Text = "Checking for album or playlist…";
+            });
+
+            var discovered = await PlaylistDiscoveryService.TryDiscoverFromVideoAsync(url, token).ConfigureAwait(true);
+            if (token.IsCancellationRequested || discovered is null)
                 return;
 
-            var kind = MusicPlaylistHeuristics.LooksLikeMusic(title) ? ContentKind.Music : ContentKind.Video;
-            ContentKindDetector.CachePlaylistKind(url, kind);
-            UpdateContentHint();
-            ApplySmartFormatDefaults();
-            UpdateDownloadActionsUi();
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (token.IsCancellationRequested)
+                    return;
+
+                var current = UrlBatchParser.Parse(UrlBox.Text).FirstOrDefault();
+                var currentVideoId = current is null ? null : YouTubeUrlHelper.TryGetVideoId(current);
+                var discoveredVideoId = YouTubeUrlHelper.TryGetVideoId(discovered.WatchUrl);
+                if (!string.Equals(currentVideoId, discoveredVideoId, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                if (YouTubeUrlHelper.TryGetListId(current!) is null)
+                {
+                    _enrichingUrlFromDiscovery = true;
+                    try
+                    {
+                        UrlBox.Text = discovered.WatchUrl;
+                    }
+                    finally
+                    {
+                        _enrichingUrlFromDiscovery = false;
+                    }
+                }
+
+                if (!IsProcessing)
+                {
+                    var countLabel = discovered.TrackCount is > 0
+                        ? $" ({discovered.TrackCount} tracks)"
+                        : "";
+                    StatusText.Text = $"Detected album/playlist: {discovered.Title ?? "Playlist"}{countLabel}";
+                }
+
+                UpdateContentHint();
+                ApplySmartFormatDefaults();
+                UpdateDownloadActionsUi();
+            });
         }
         catch (OperationCanceledException)
         {
@@ -984,7 +1042,7 @@ public partial class MainWindow
         }
         catch
         {
-            /* ignore playlist title probe failures */
+            /* ignore playlist probe failures */
         }
     }
 
@@ -1498,9 +1556,10 @@ public partial class MainWindow
             return;
 
         var url = urls[0];
+        url = await PlaylistDiscoveryService.EnsurePlaylistUrlAsync(url).ConfigureAwait(true);
         var format = GetSelectedFormat();
         var chosen = GetSelectedContentKind();
-        var namingKind = ContentKindDetector.Resolve(chosen, url);
+        var namingKind = ContentKindDetector.Resolve(chosen, PlaylistDiscoveryService.GetEffectiveUrl(urls[0]));
         if (namingKind != ContentKind.Music)
         {
             MessageBox.Show(this, "Album review is for music playlists. Set content type to Music or Auto with a music album URL.", "Review album", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1539,9 +1598,16 @@ public partial class MainWindow
         var chosenContent = GetSelectedContentKind();
         if (scope == DownloadScope.Playlist)
         {
-            foreach (var url in urls.Where(PlaylistKindResolver.HasPlaylist).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var rawUrl in urls.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                var resolved = await EnsurePlaylistKindResolvedAsync(url, chosenContent).ConfigureAwait(true);
+                if (!PlaylistKindResolver.HasPlaylist(rawUrl))
+                    await PlaylistDiscoveryService.TryDiscoverFromVideoAsync(rawUrl).ConfigureAwait(true);
+
+                var effectiveUrl = PlaylistDiscoveryService.GetEffectiveUrl(rawUrl);
+                if (!PlaylistKindResolver.HasPlaylist(effectiveUrl))
+                    continue;
+
+                var resolved = await EnsurePlaylistKindResolvedAsync(effectiveUrl, chosenContent).ConfigureAwait(true);
                 if (resolved is null)
                     return;
             }
@@ -1549,8 +1615,11 @@ public partial class MainWindow
 
         var jobs = new List<DownloadJob>();
         var skipped = 0;
-        foreach (var url in urls)
+        foreach (var rawUrl in urls)
         {
+            var url = scope == DownloadScope.Playlist
+                ? PlaylistDiscoveryService.GetEffectiveUrl(rawUrl)
+                : rawUrl;
             if (!IsLikelyYouTubeUrl(url))
             {
                 var confirm = MessageBox.Show(this,
@@ -1572,7 +1641,8 @@ public partial class MainWindow
                 namingKind == ContentKind.Music &&
                 App.Settings.ReviewAlbumTracksBeforeDownload)
             {
-                var reviewJobs = await TryBuildJobsFromAlbumReviewAsync(url, format, namingKind, forceRedownload)
+                var playlistUrl = await PlaylistDiscoveryService.EnsurePlaylistUrlAsync(url).ConfigureAwait(true);
+                var reviewJobs = await TryBuildJobsFromAlbumReviewAsync(playlistUrl, format, namingKind, forceRedownload)
                     .ConfigureAwait(true);
                 if (reviewJobs is null)
                     continue;
@@ -1636,6 +1706,7 @@ public partial class MainWindow
         bool forceRedownload)
     {
         var previousStatus = StatusText.Text;
+        url = await PlaylistDiscoveryService.EnsurePlaylistUrlAsync(url).ConfigureAwait(true);
         StatusText.Text = "Detecting album tracks…";
         try
         {
@@ -2516,6 +2587,8 @@ public partial class MainWindow
                     }
                 }
                 AppendLog("Done!");
+                if (!string.IsNullOrWhiteSpace(e.ErrorMessage))
+                    AppendLog(e.ErrorMessage);
                 RecordHistory(e, context.Job);
                 if (App.Settings.SkipAlreadyDownloaded && e.Scope == DownloadScope.SingleVideo)
                     AppendToDownloadArchive(context.Job.Url);
@@ -2553,6 +2626,25 @@ public partial class MainWindow
 
     private void RecordHistory(DownloadCompletedEventArgs e, DownloadJob job)
     {
+        if (IsAlbumTrackBatch(job))
+        {
+            if (!IsAlbumSessionComplete(job))
+                return;
+
+            RecordCollectionHistory(e, job, job.PlaylistTrackTotal ?? _sessionCompletedCount);
+            return;
+        }
+
+        if (job.Scope == DownloadScope.Playlist)
+        {
+            var folder = DownloadJobPathHelper.ResolveAlbumFolder(job)
+                         ?? Path.GetDirectoryName(e.OutputPath)
+                         ?? e.OutputFolder;
+            var trackCount = Math.Max(1, DownloadHistoryViewBuilder.CountMediaFiles(folder, e.Format));
+            RecordCollectionHistory(e, job, trackCount);
+            return;
+        }
+
         _history.Add(new DownloadHistoryEntry
         {
             Url = job.Url,
@@ -2564,7 +2656,47 @@ public partial class MainWindow
             Scope = e.Scope.ToString(),
             CompletedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
             Success = true,
+            IsCollection = false,
+            TrackCount = 1,
         });
+    }
+
+    private void RecordCollectionHistory(DownloadCompletedEventArgs e, DownloadJob job, int trackCount)
+    {
+        var folder = DownloadJobPathHelper.ResolveAlbumFolder(job)
+                     ?? Path.GetDirectoryName(e.OutputPath)
+                     ?? e.OutputFolder;
+        var title = !string.IsNullOrWhiteSpace(job.CollectionTitle)
+            ? job.CollectionTitle
+            : job.PredictedTitle ?? Path.GetFileName(folder) ?? "Playlist";
+
+        _history.Add(new DownloadHistoryEntry
+        {
+            Url = ResolveCollectionUrl(job),
+            Title = title,
+            CollectionTitle = title,
+            OutputPath = folder,
+            OutputFolder = e.OutputFolder,
+            Format = DownloadFormats.ToTag(e.Format),
+            ContentKind = e.ContentKind.ToString(),
+            Scope = nameof(DownloadScope.Playlist),
+            CompletedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+            Success = true,
+            IsCollection = true,
+            TrackCount = Math.Max(1, trackCount),
+        });
+    }
+
+    private static bool IsAlbumTrackBatch(DownloadJob job) =>
+        job.PlaylistTrackIndex is not null && job.PlaylistTrackTotal is > 1;
+
+    private static string ResolveCollectionUrl(DownloadJob job)
+    {
+        if (job.Scope == DownloadScope.Playlist)
+            return job.Url;
+
+        var playlistUrl = YouTubeUrlHelper.TryGetPlaylistUrl(job.Url);
+        return string.IsNullOrWhiteSpace(playlistUrl) ? job.Url : playlistUrl;
     }
 
     private void ShowAlbumDoneState(string albumFolder, int trackCount, ContentKind contentKind)

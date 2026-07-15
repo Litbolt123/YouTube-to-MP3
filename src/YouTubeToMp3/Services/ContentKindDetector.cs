@@ -8,6 +8,8 @@ public static class ContentKindDetector
 
     public static ContentKind DetectFromUrl(string url)
     {
+        url = PlaylistDiscoveryService.GetEffectiveUrl(url);
+
         if (YouTubeUrlHelper.IsMusicAlbumOrPlaylist(url))
             return ContentKind.Music;
 

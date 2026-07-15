@@ -50,6 +50,9 @@ public static partial class LocalMusicHubIntegration
             return false;
 
         var kind = ParseContentKind(entry.ContentKind);
+        if (entry.IsCollection && Directory.Exists(entry.OutputPath))
+            return CanImportAlbumFolder(entry.OutputPath, kind);
+
         return CanImport(entry.OutputPath, kind);
     }
 

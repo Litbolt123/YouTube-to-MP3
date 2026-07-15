@@ -15,6 +15,14 @@ public sealed class DownloadHistoryEntry
     public string Scope { get; set; } = "SingleVideo";
     public string CompletedUtc { get; set; } = "";
     public bool Success { get; set; }
+
+    /// <summary>Playlist or album download (one history row, not per track).</summary>
+    public bool IsCollection { get; set; }
+
+    /// <summary>Tracks or videos in a collection; 1 for singles.</summary>
+    public int TrackCount { get; set; } = 1;
+
+    public string? CollectionTitle { get; set; }
 }
 
 public sealed class DownloadHistoryService

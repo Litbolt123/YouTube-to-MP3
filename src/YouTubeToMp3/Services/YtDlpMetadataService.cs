@@ -158,7 +158,7 @@ public static class YtDlpMetadataService
         sb.Append("--parse-metadata \"+%(album)s:%(playlist_title)s\" ");
 
         if (DownloadFormats.IsAudio(format))
-            sb.Append($"-f bestaudio/best -x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} ");
+            sb.Append($"-f {QualityPresets.BestAudioFormatSelector} -x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} ");
 
         sb.Append($"\"{url}\"");
         return sb.ToString();
@@ -184,7 +184,7 @@ public static class YtDlpMetadataService
             sb.Append("--parse-metadata \"+%(album)s:%(playlist_title)s\" ");
 
         if (DownloadFormats.IsAudio(format))
-            sb.Append($"-f bestaudio/best -x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} ");
+            sb.Append($"-f {QualityPresets.BestAudioFormatSelector} -x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} ");
 
         sb.Append($"\"{url}\"");
         return sb.ToString();
@@ -464,7 +464,7 @@ public static class YtDlpMetadataService
         if (contentKind == ContentKind.Music)
             sb.Append("--parse-metadata \"+%(album)s:%(playlist_title)s\" ");
         if (DownloadFormats.IsAudio(format))
-            sb.Append($"-f bestaudio/best -x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} ");
+            sb.Append($"-f {QualityPresets.BestAudioFormatSelector} -x --audio-format {DownloadFormats.ToYtDlpAudioFormat(format)} ");
         sb.Append($"\"{playlistUrl}\"");
 
         var stdout = await RunYtDlpStdoutAsync(tools.YtDlpPath!, sb.ToString(), cancellationToken)
