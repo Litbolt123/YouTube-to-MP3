@@ -2646,6 +2646,7 @@ public partial class MainWindow
         if (!_sessionLogStarted)
         {
             LogBox.Clear();
+            _logBoxLineCount = 0;
             _logService.BeginSession($"{formatLabel} / {kindLabel} / {scopeLabel} — {job.Url}");
             AppendLog($"Saving logs to: {_logService.CurrentLogPath}");
             AppendLog($"Output folder: {job.OutputFolder}");
@@ -2914,7 +2915,7 @@ public partial class MainWindow
 
     private void Downloader_OnProgress(ActiveDownloadContext context, DownloadProgressEventArgs e)
     {
-        Dispatcher.Invoke(() =>
+        Dispatcher.BeginInvoke(() =>
         {
             AppendLog(e.Line);
 
@@ -3278,11 +3279,33 @@ public partial class MainWindow
         }
     }
 
+    private const int LogBoxMaxLines = 2000;
+    private const int LogBoxKeepLines = 1000;
+    private int _logBoxLineCount;
+
     private void AppendLog(string line)
     {
         LogBox.AppendText(line + Environment.NewLine);
+        if (++_logBoxLineCount > LogBoxMaxLines)
+        {
+            LogBox.Text = KeepLastLines(LogBox.Text, LogBoxKeepLines);
+            _logBoxLineCount = LogBoxKeepLines;
+        }
+
         LogBox.ScrollToEnd();
         _logService.WriteLine(line);
+    }
+
+    internal static string KeepLastLines(string text, int keep)
+    {
+        var seen = 0;
+        for (var i = text.Length - 1; i >= 0; i--)
+        {
+            if (text[i] == '\n' && ++seen > keep)
+                return text[(i + 1)..];
+        }
+
+        return text;
     }
 
     private void RefreshToolStatus()

@@ -44,7 +44,7 @@ public static class CoverArtEmbedService
                     FileName = tools.FfmpegPath,
                     Arguments = args,
                     UseShellExecute = false,
-                    RedirectStandardOutput = true,
+                    RedirectStandardOutput = false,
                     RedirectStandardError = true,
                     CreateNoWindow = true,
                 },
@@ -54,16 +54,22 @@ public static class CoverArtEmbedService
             if (!process.Start())
                 throw new InvalidOperationException("Could not start ffmpeg for cover art.");
 
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            if (process.ExitCode != 0 || !File.Exists(tempOut))
-                throw new InvalidOperationException(
-                    string.IsNullOrWhiteSpace(stderr)
-                        ? $"ffmpeg failed embedding cover art (exit {process.ExitCode})."
-                        : stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault()
-                          ?? $"ffmpeg failed (exit {process.ExitCode}).");
+            string stderr;
+            try
+            {
+                stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+                await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                TryKill(process);
+                throw;
+            }
 
-            File.Copy(tempOut, mediaPath, overwrite: true);
+            if (process.ExitCode != 0 || !File.Exists(tempOut))
+                throw new InvalidOperationException(DescribeFailure(stderr, process.ExitCode));
+
+            File.Move(tempOut, mediaPath, overwrite: true);
         }
         finally
         {
@@ -89,6 +95,28 @@ public static class CoverArtEmbedService
             cancellationToken.ThrowIfCancellationRequested();
             if (IsEmbeddableMedia(path))
                 await EmbedAsync(path, coverImagePath, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    internal static string DescribeFailure(string stderr, int exitCode)
+    {
+        var detail = stderr
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .LastOrDefault(l => !l.Equals("Conversion failed!", StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrWhiteSpace(detail)
+            ? $"ffmpeg failed embedding cover art (exit {exitCode})."
+            : $"ffmpeg failed embedding cover art: {detail}";
+    }
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
         }
     }
 
@@ -118,7 +146,21 @@ public static class CoverArtEmbedService
                    $"-disposition:v:1 attached_pic -metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" {outQ}";
         }
 
-        // m4a / mp4 / others: attach as video stream disposition
+        if (string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ext, ".m4v", StringComparison.OrdinalIgnoreCase))
+        {
+            // The cover must be its own stream after the real video; tagging v:0 marks the H.264 track as a picture and the mp4 muxer rejects it.
+            return $"-hide_banner -nostats -loglevel error -y -i {mediaQ} -i {coverQ} -map 0:v:0 -map 0:a? -map 1:0 -c copy -c:v:1 mjpeg " +
+                   $"-disposition:v:0 default -disposition:v:1 attached_pic " +
+                   $"-metadata:s:v:1 title=\"Album cover\" -metadata:s:v:1 comment=\"Cover (front)\" {outQ}";
+        }
+
+        if (string.Equals(ext, ".m4a", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"-hide_banner -nostats -loglevel error -y -i {mediaQ} -i {coverQ} -map 0:a -map 1:0 -c copy -c:v:0 mjpeg " +
+                   $"-disposition:v:0 attached_pic -metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" {outQ}";
+        }
+
         return $"-y -i {mediaQ} -i {coverQ} -map 0 -map 1 -c copy -disposition:v:0 attached_pic " +
                $"-metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" {outQ}";
     }

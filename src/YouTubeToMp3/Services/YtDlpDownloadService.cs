@@ -55,8 +55,11 @@ public sealed class YtDlpDownloadService : IDisposable
         RegexOptions.Compiled);
     private static readonly Regex MergeRegex = new(@"\[ExtractAudio\]|Deleting original file|\[Merger\]|Embedding thumbnail|\[ThumbnailsConvertor\]", RegexOptions.Compiled);
 
+    private static readonly long ProgressEmitIntervalTicks = Stopwatch.Frequency / 4;
+
     private Process? _process;
     private CancellationTokenSource? _cts;
+    private long _lastProgressEmitTicks;
 
     public event EventHandler<DownloadProgressEventArgs>? Progress;
     public event EventHandler<DownloadCompletedEventArgs>? Completed;
@@ -265,6 +268,7 @@ public sealed class YtDlpDownloadService : IDisposable
                     .Where(CoverArtEmbedService.IsEmbeddableMedia)
                     .Concat(stagedMedia)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Where(File.Exists)
                     .ToList();
                 if (targets.Count == 0 && CoverArtEmbedService.IsEmbeddableMedia(stagingOutputFile))
                     targets.Add(stagingOutputFile);
@@ -551,6 +555,9 @@ public sealed class YtDlpDownloadService : IDisposable
         if (match.Success && double.TryParse(match.Groups[1].Value, out var p))
             percent = p;
 
+        if (IsThrottledProgressLine(line, percent) && !TryClaimProgressSlot())
+            return;
+
         string? eta = null;
         var etaMatch = EtaRegex.Match(line);
         if (etaMatch.Success)
@@ -624,6 +631,23 @@ public sealed class YtDlpDownloadService : IDisposable
             CurrentVideoUrl = currentVideoUrl,
             Status = status,
         });
+    }
+
+    internal static bool IsThrottledProgressLine(string line, double? percent)
+    {
+        if (percent is { } value)
+            return value < 100 || !line.Contains(" in ", StringComparison.Ordinal);
+        return line.StartsWith("frame=", StringComparison.Ordinal) ||
+               line.StartsWith("size=", StringComparison.Ordinal);
+    }
+
+    private bool TryClaimProgressSlot()
+    {
+        var now = Stopwatch.GetTimestamp();
+        var last = Interlocked.Read(ref _lastProgressEmitTicks);
+        if (now - last < ProgressEmitIntervalTicks)
+            return false;
+        return Interlocked.CompareExchange(ref _lastProgressEmitTicks, now, last) == last;
     }
 
     public void Dispose()
