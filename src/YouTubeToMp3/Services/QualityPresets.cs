@@ -7,26 +7,45 @@ namespace YouTubeToMp3.Services;
 
 public static class QualityPresets
 {
-    public static IReadOnlyList<(string Label, int Value)> GetOptions(DownloadFormat format) =>
-        DownloadFormats.IsVideo(format)
-            ? new[]
-            {
-                ("Best available", 0),
-                ("Up to 4K (2160p)", 1),
-                ("Up to 1440p", 2),
-                ("Up to 1080p", 5),
-                ("Up to 720p (smaller)", 9),
-                ("Up to 480p", 10),
-                ("Up to 360p", 11),
-                ("Up to 240p", 12),
-                ("Up to 144p", 13),
-            }
-            : new[]
-            {
+    /// <summary>Cap MP4 height to this PC's display (see <see cref="ScreenResolutionService"/>).</summary>
+    public const int MatchScreenQuality = -1;
+
+    public static IReadOnlyList<(string Label, int Value)> GetOptions(DownloadFormat format)
+    {
+        if (!DownloadFormats.IsVideo(format))
+        {
+            return
+            [
                 ("Best (VBR)", 0),
                 ("Good (default)", 5),
                 ("Smaller file", 9),
-            };
+            ];
+        }
+
+        var screen = ScreenResolutionService.PreferredVideoHeight;
+        return
+        [
+            ($"Match this screen ({ScreenResolutionService.LabelForHeight(screen)})", -1),
+            ("Best available (highest this video has)", 0),
+            ("Up to 4K (2160p)", 1),
+            ("Up to 1440p", 2),
+            ("Up to 1080p", 5),
+            ("Up to 720p", 9),
+            ("Up to 480p", 10),
+            ("Up to 360p", 11),
+            ("Up to 240p", 12),
+            ("Up to 144p", 13),
+        ];
+    }
+
+    public static int DefaultVideoQuality(AppSettings settings)
+    {
+        if (settings.VideoQuality == MatchScreenQuality)
+            return MatchScreenQuality;
+        if (settings.MatchVideoToScreen && settings.VideoQuality == 0)
+            return MatchScreenQuality;
+        return settings.VideoQuality;
+    }
 
     // Prefer highest-bitrate M4A/AAC when available; Opus decode via ffmpeg adds crackle on FLAC/MP3.
     private const string AacAudio =
@@ -35,19 +54,42 @@ public static class QualityPresets
     /// <summary>Prefer AAC/M4A for all transcodes (MP3/FLAC/WAV/M4A).</summary>
     public const string BestAudioFormatSelector = AacAudio;
 
-    // YouTube serves 1080p+ as VP9/AV1 (webm), not native mp4. Height caps only; ffmpeg remuxes via --merge-output-format mp4.
-    public static string GetMp4FormatSelector(int quality) => quality switch
+    public static int? ResolveVideoHeightCap(int quality)
     {
-        1 => $"bestvideo[height<=2160]+{AacAudio}/best[height<=2160]/best",
-        2 => $"bestvideo[height<=1440]+{AacAudio}/best[height<=1440]/best",
-        5 => $"bestvideo[height<=1080]+{AacAudio}/best[height<=1080]/best",
-        9 => $"bestvideo[height<=720]+{AacAudio}/best[height<=720]/best",
-        10 => $"bestvideo[height<=480]+{AacAudio}/best[height<=480]/best",
-        11 => $"bestvideo[height<=360]+{AacAudio}/best[height<=360]/best",
-        12 => $"bestvideo[height<=240]+{AacAudio}/best[height<=240]/best",
-        13 => $"bestvideo[height<=144]+{AacAudio}/best[height<=144]/best",
-        _ => $"bestvideo+{AacAudio}/best",
-    };
+        if (quality >= 144)
+            return quality;
+
+        if (quality == MatchScreenQuality)
+            return ScreenResolutionService.PreferredVideoHeight;
+
+        return quality switch
+        {
+            1 => 2160,
+            2 => 1440,
+            5 => 1080,
+            9 => 720,
+            10 => 480,
+            11 => 360,
+            12 => 240,
+            13 => 144,
+            _ => null,
+        };
+    }
+
+    // YouTube 1080p+ is VP9/AV1. Each `/` must be a full video+audio pair —
+    // splicing AacAudio (which contains `/`) turned later branches into audio-only .m4a.
+    public static string GetMp4FormatSelector(int quality, bool matchScreen = true)
+    {
+        _ = matchScreen;
+        var cap = ResolveVideoHeightCap(quality);
+        var heightFilter = cap is int h ? $"[height<={h}]" : "";
+        // Prefer VP9/H.264 before AV1. Format 400 (AV1 1440p) often hangs while "Testing format".
+        return
+            $"bestvideo{heightFilter}[vcodec!*=av01]+bestaudio[ext=m4a]/" +
+            $"bestvideo{heightFilter}[vcodec!*=av01]+bestaudio/" +
+            $"bestvideo{heightFilter}+bestaudio[ext=m4a]/" +
+            $"bestvideo{heightFilter}+bestaudio";
+    }
 
     public static void ApplyToCombo(ComboBox combo, DownloadFormat format, int selectedValue)
     {
@@ -98,7 +140,13 @@ public static class QualityPresets
                 return label;
         }
 
-        return quality == 0 ? "Best" : quality.ToString(CultureInfo.InvariantCulture);
+        return quality switch
+        {
+            MatchScreenQuality => $"Match this screen ({ScreenResolutionService.LabelForHeight(ScreenResolutionService.PreferredVideoHeight)})",
+            0 => DownloadFormats.IsVideo(format) ? "Best available" : "Best",
+            _ when quality >= 144 => ScreenResolutionService.LabelForHeight(quality),
+            _ => quality.ToString(CultureInfo.InvariantCulture),
+        };
     }
 
     /// <summary>yt-dlp args for audio download/extract (format, extract, optional anti-clip filter).</summary>

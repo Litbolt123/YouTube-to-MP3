@@ -45,6 +45,17 @@ public static class YouTubeUrlHelper
         return m.Success ? Uri.UnescapeDataString(m.Groups[1].Value) : null;
     }
 
+    public static bool SameVideo(string? a, string? b)
+    {
+        var idA = TryGetVideoId(a ?? "");
+        var idB = TryGetVideoId(b ?? "");
+        if (!string.IsNullOrWhiteSpace(idA) && !string.IsNullOrWhiteSpace(idB))
+            return string.Equals(idA, idB, StringComparison.OrdinalIgnoreCase);
+
+        return !string.IsNullOrWhiteSpace(a) &&
+               string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static string? TryGetVideoId(string url)
     {
         var queryMatch = VideoIdQueryRegex.Match(url);

@@ -31,27 +31,46 @@ public sealed class BrowserExtensionHost : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
     private string _token = "";
+    private bool _enabled;
+    private int _configuredPort;
 
     public event EventHandler<ExtensionDownloadRequest>? DownloadRequested;
 
     /// <summary>Wired by MainWindow to check queue/history/disk for a URL.</summary>
     public Func<string, DuplicateCheckResult>? CheckUrl { get; set; }
 
+    /// <summary>Wired by MainWindow for live YouTube-button status (queued / downloading / file gone).</summary>
+    public Func<string, ExtensionJobStatus>? WatchUrl { get; set; }
+
+    /// <summary>Wired by MainWindow to reset the idle auto-quit timer.</summary>
+    public Action? OnActivity { get; set; }
+
     public bool IsRunning => _listener?.IsListening == true;
     public int Port { get; private set; }
 
     public void ApplySettings(AppSettings settings)
     {
-        Stop();
-
-        if (!settings.BrowserExtensionEnabled)
-            return;
-
         AppSettingsService.EnsureExtensionToken(settings);
-        _token = settings.BrowserExtensionToken;
-        Port = settings.BrowserExtensionPort is > 0 and < 65536
+        var port = settings.BrowserExtensionPort is > 0 and < 65536
             ? settings.BrowserExtensionPort
             : AppSettingsService.DefaultExtensionPort;
+        var token = settings.BrowserExtensionToken;
+        var enabled = settings.BrowserExtensionEnabled;
+
+        if (IsRunning && _enabled == enabled && _configuredPort == port &&
+            string.Equals(_token, token, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Stop();
+        _enabled = enabled;
+        _configuredPort = port;
+        _token = token;
+        Port = port;
+
+        if (!enabled)
+            return;
 
         Start();
     }
@@ -110,15 +129,29 @@ public sealed class BrowserExtensionHost : IDisposable
             }
 
             var path = request.Url?.AbsolutePath?.TrimEnd('/') ?? "";
+            if (path is not "/health" and not "/status")
+                OnActivity?.Invoke();
 
             if (path == "/health" && request.HttpMethod == "GET")
             {
                 var hub = LocalMusicHubIntegration.GetLinkStatus();
+                var screen = ScreenResolutionService.PreferredVideoHeight;
                 await WriteJsonAsync(response, 200, new
                 {
                     status = "ok",
                     app = "YouTube Downloader",
                     version = UpdateCheckService.CurrentAssemblyVersion.ToString(3),
+                    video = new
+                    {
+                        matchScreen = App.Settings.MatchVideoToScreen,
+                        screenHeight = screen,
+                        defaultQuality = QualityPresets.DefaultVideoQuality(App.Settings),
+                    },
+                    button = new
+                    {
+                        afterDownload = App.Settings.ExtensionButtonAfterDownload,
+                        resetSeconds = App.Settings.ExtensionButtonResetSeconds,
+                    },
                     integrations = new
                     {
                         localMusicHub = new
@@ -165,6 +198,45 @@ public sealed class BrowserExtensionHost : IDisposable
                     message = check.Message,
                     title = check.Title,
                     path = check.Path,
+                }).ConfigureAwait(false);
+                return;
+            }
+
+            if (path == "/status" && request.HttpMethod == "POST")
+            {
+                if (!ValidateToken(request))
+                {
+                    await WriteJsonAsync(response, 401, new { error = "Invalid token" }).ConfigureAwait(false);
+                    return;
+                }
+
+                using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
+                var body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                var payload = JsonSerializer.Deserialize<ExtensionCheckPayload>(body, JsonOptions);
+                if (string.IsNullOrWhiteSpace(payload?.Url))
+                {
+                    await WriteJsonAsync(response, 400, new { error = "Missing url" }).ConfigureAwait(false);
+                    return;
+                }
+
+                var status = WatchUrl?.Invoke(payload.Url.Trim()) ?? new ExtensionJobStatus
+                {
+                    State = "idle",
+                    AfterDownload = App.Settings.ExtensionButtonAfterDownload,
+                    ResetSeconds = App.Settings.ExtensionButtonResetSeconds,
+                };
+                await WriteJsonAsync(response, 200, new
+                {
+                    ok = true,
+                    state = status.State,
+                    fileExists = status.FileExists,
+                    downloadedBefore = status.DownloadedBefore,
+                    percent = status.Percent,
+                    detail = status.Detail,
+                    title = status.Title,
+                    path = status.Path,
+                    afterDownload = status.AfterDownload,
+                    resetSeconds = status.ResetSeconds,
                 }).ConfigureAwait(false);
                 return;
             }
@@ -217,6 +289,37 @@ public sealed class BrowserExtensionHost : IDisposable
                 });
 
                 await WriteJsonAsync(response, 200, new { ok = true, message = "Queued" }).ConfigureAwait(false);
+                return;
+            }
+
+            if (path == "/formats" && request.HttpMethod == "POST")
+            {
+                if (!ValidateToken(request))
+                {
+                    await WriteJsonAsync(response, 401, new { error = "Invalid token" }).ConfigureAwait(false);
+                    return;
+                }
+
+                using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
+                var body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                var payload = JsonSerializer.Deserialize<ExtensionCheckPayload>(body, JsonOptions);
+                if (string.IsNullOrWhiteSpace(payload?.Url))
+                {
+                    await WriteJsonAsync(response, 400, new { error = "Missing url" }).ConfigureAwait(false);
+                    return;
+                }
+
+                var probe = await VideoFormatProbeService.ProbeAsync(payload.Url.Trim()).ConfigureAwait(false);
+                await WriteJsonAsync(response, 200, new
+                {
+                    ok = true,
+                    heights = probe.Heights,
+                    bestHeight = probe.BestHeight,
+                    suggestedHeight = probe.SuggestedHeight,
+                    screenHeight = probe.ScreenHeight,
+                    matchScreen = App.Settings.MatchVideoToScreen,
+                    defaultQuality = QualityPresets.DefaultVideoQuality(App.Settings),
+                }).ConfigureAwait(false);
                 return;
             }
 

@@ -2,7 +2,10 @@ using System.Text;
 
 namespace YouTubeToMp3.Services;
 
-/// <summary>Writes download output to disk under %LocalAppData%\YouTubeToMp3\logs\.</summary>
+/// <summary>
+/// Writes download output to disk under %LocalAppData%\YouTubeToMp3\logs\.
+/// Lines prefixed with DIAG: are structured diagnostics (grep-friendly).
+/// </summary>
 public sealed class DownloadLogService : IDisposable
 {
     private readonly object _lock = new();

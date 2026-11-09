@@ -6,7 +6,7 @@ Send YouTube videos to the desktop app with a **Download** button on watch pages
 
 ## One-time setup
 
-1. **Rebuild / run the app** (v1.6.0+). Keep it open — clients talk to `http://127.0.0.1:47384` on your PC only.
+1. **Rebuild / run the app** (v1.6.0+). The extension can **wake** the app when it is not running (Settings → **Auto-quit when idle**). While the app is open, clients talk to `http://127.0.0.1:47384` on your PC only.
 2. Open **Settings → Local API** in the app.
 3. Click **Copy** next to the connection token.
 4. Click **Open extension folder** and note that folder path.
@@ -22,7 +22,9 @@ Send YouTube videos to the desktop app with a **Download** button on watch pages
 On any YouTube watch page, click the red **Download** button (aligned next to Like/Dislike):
 
 - **Audio** — quick download using your default audio format (MP3 by default).
-- **Video** — quick MP4 download using your app’s default video quality.
+- **Video quality** — shown **after you click Download**. The Video button lists the quality (1080p60, …). Default is the highest rung that fits your screen.
+- **Video** — saves that MP4 quality.
+- **Button on the page** — **Download**, then **Queued**, **Downloading**, **Downloaded ✓**. Quality is not on this pill. Delete the file → **Download** again. Settings can reset to Download after a few seconds with a ✓ while the file is still there.
 - **Whole playlist** — when the URL has a `list=` playlist (not autoplay/radio mixes), extra **Audio** / **Video** buttons download the full playlist. **More options…** also includes a **This video only** / **Whole playlist** picker.
 - **More options…** — choose format (MP3, M4A, Opus, FLAC, WAV, MP4), quality/resolution (including 480p–144p), and save-as (auto / music / video).
 
@@ -36,7 +38,9 @@ Used by the **browser extension** and **Local Music Hub**.
 
 | Method | Path | Body | Notes |
 |--------|------|------|--------|
-| GET | `/health` | — | App status / version / `integrations.localMusicHub` |
+| GET | `/health` | — | App status / version / `video.matchScreen`, `screenHeight`, `defaultQuality` / `button.afterDownload`, `resetSeconds` / `integrations.localMusicHub`. Does not reset idle timeout. |
+| POST | `/formats` | `{ "url" }` | Video heights for this URL (`heights`, `bestHeight`, `suggestedHeight`, `screenHeight`) — Hub/other clients; the YouTube page uses the player on the tab instead |
+| POST | `/status` | `{ "url" }` | Live button state: `idle` / `queued` / `downloading` / `downloaded`, plus `fileExists`, `downloadedBefore`, `percent`. Does not reset idle timeout. |
 | POST | `/check` | `{ "url" }` | Returns `{ ok, alreadyDownloaded, inQueue, inHistory, message, title?, path? }` |
 | POST | `/download` | `{ url, scope?, format?, quality?, contentKind?, forceRedownload? }` | Queue a download; `forceRedownload: true` bypasses skip-already-downloaded |
 
@@ -46,7 +50,7 @@ Music Hub typically sends `contentKind: "music"`, `format: "mp3"`, `scope: "sing
 
 ## Extension version
 
-Current bridge: **1.4.5** (instant inline Download in action row; slight right spacing; see `docs/youtube-action-button-injection.md`).
+Current bridge: **1.5.2** (Download pill; quality in the open panel; Downloaded ✓ after save).
 ## Security
 
 - Only listens on `127.0.0.1` (not reachable from other devices).
@@ -65,7 +69,7 @@ See [integration-local-music-hub.md](integration-local-music-hub.md).
 
 | Problem | Fix |
 |---------|-----|
-| "Could not reach the app" | Open the desktop app; check extension is enabled in Settings |
+| "Could not reach the app" | App may be closed — click Download again to wake it (idle mode), or open the desktop app; check extension is enabled in Settings |
 | "Invalid token" | Copy the token again from app Settings into extension options |
 | Button missing on YouTube | Refresh the page; open `chrome://extensions` → **Reload** on the extension (v1.0.1+ fixes shadow DOM) |
 | Port in use | Change the port in app Settings and extension options |

@@ -20,21 +20,26 @@
   margin: 0;
   flex-shrink: 0;
   box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .ytmp3-btn:hover:not(:disabled) {
   background: #b71c1c;
 }
 
-.ytmp3-btn:disabled {
-  opacity: 0.7;
-  cursor: wait;
+.ytmp3-btn-mark {
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.95;
 }
 
 .ytmp3-panel {
   position: absolute;
   z-index: 2147483646;
-  width: 280px;
+  width: 300px;
   padding: 14px;
   border-radius: 12px;
   background: #181c24;
@@ -47,8 +52,24 @@
 .ytmp3-panel-title {
   font-size: 14px;
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   color: #ef5350;
+}
+
+.ytmp3-panel-status {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #242a36;
+  color: #c5d0de;
+  font-size: 12px;
+}
+
+.ytmp3-panel-lead {
+  margin: 0 0 12px;
+  color: #b8c0cc;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .ytmp3-scope-label {
@@ -80,6 +101,38 @@
   margin-bottom: 8px;
 }
 
+.ytmp3-quick-row-tall .ytmp3-quick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 58px;
+  padding: 10px 8px;
+}
+
+.ytmp3-quick-name {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.ytmp3-quick-cap {
+  font-size: 11px;
+  font-weight: 500;
+  color: #8a93a3;
+  line-height: 1.2;
+}
+
+.ytmp3-quick-audio .ytmp3-quick-cap {
+  color: #ce93d8;
+}
+
+.ytmp3-quick-video .ytmp3-quick-cap,
+.ytmp3-quick-playlist-video .ytmp3-quick-cap {
+  color: #90caf9;
+}
+
 .ytmp3-quick,
 .ytmp3-toggle-details,
 .ytmp3-confirm {
@@ -105,6 +158,14 @@
 
 .ytmp3-quick-video {
   border-color: #3d6ea8;
+}
+
+.ytmp3-quality-row {
+  margin: 0 0 10px;
+}
+
+.ytmp3-quality-row .ytmp3-select {
+  margin-top: 4px;
 }
 
 .ytmp3-toggle-details {

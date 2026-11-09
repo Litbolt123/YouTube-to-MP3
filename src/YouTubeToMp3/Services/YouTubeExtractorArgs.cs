@@ -8,21 +8,24 @@ namespace YouTubeToMp3.Services;
 public static class YouTubeExtractorArgs
 {
     /// <summary>
-    /// Player clients that expose high-res streams without a manual GVS PO token.
-    /// android_vr: no PO token required (yt-dlp wiki). web_safari: HLS without GVS token.
-    /// Avoid mweb/web-only — they skip HTTPS/DASH formats without a PO token (falls back to ~360p format 18).
+    /// Broken or token-gated clients excluded from all downloads.
+    /// android_sdkless: 403 on many videos (yt-dlp #15712). tv_simply/mweb: require PO tokens.
+    /// </summary>
+    private const string ExcludeBroken = ",-android_sdkless,-tv_simply,-mweb";
+
+    /// <summary>
+    /// Player clients that work without manual GVS PO tokens.
+    /// Prefer yt-dlp's maintained default set, then exclude known-broken clients.
     /// </summary>
     public static string GetPlayerClients(string url, DownloadFormat format)
     {
         if (YouTubeUrlHelper.IsMusicAlbumOrPlaylist(url))
-            return "web_music,android_vr,tv_simply,default";
+            return "default,web_music" + ExcludeBroken;
 
         if (format is DownloadFormat.Flac or DownloadFormat.Wav)
-            return "ios,android_vr,tv_simply,web_safari,default,web_music";
+            return "ios,default" + ExcludeBroken;
 
-        return DownloadFormats.IsVideo(format)
-            ? "android_vr,tv_simply,tv,web_safari,default"
-            : "android_vr,tv_simply,default,web_music";
+        return "default" + ExcludeBroken;
     }
 
     public static void Append(StringBuilder sb, ToolCheckResult tools, string url, DownloadFormat format)

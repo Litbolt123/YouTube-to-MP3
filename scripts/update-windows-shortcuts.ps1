@@ -75,6 +75,16 @@ if (Test-Path $iconPath) {
     Copy-Item $iconPath (Join-Path $installDir 'app.ico') -Force
 }
 
+$protocolKey = 'HKCU:\Software\Classes\youtubetomp3'
+New-Item -Path $protocolKey -Force | Out-Null
+Set-ItemProperty -Path $protocolKey -Name '(default)' -Value 'URL:YouTube Downloader'
+New-ItemProperty -Path $protocolKey -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+$commandKey = Join-Path $protocolKey 'shell\open\command'
+New-Item -Path $commandKey -Force | Out-Null
+$protocolCommand = "`"$installExe`" --minimized --extension-wake `"%1`""
+Set-ItemProperty -Path $commandKey -Name '(default)' -Value $protocolCommand
+Write-Host "  Protocol: youtubetomp3:// -> $installExe"
+
 function Update-Shortcut {
     param(
         [Parameter(Mandatory)][string] $ShortcutPath,

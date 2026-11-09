@@ -26,6 +26,8 @@ public sealed record ToolCheckResult(
 
 public static class ToolDependencyService
 {
+    private static string? _cachedYtDlpVersion;
+
     private static string BundledToolsDir =>
         Path.Combine(AppContext.BaseDirectory, "tools");
 
@@ -82,15 +84,83 @@ public static class ToolDependencyService
         "If they are missing, reinstall from the latest setup, or install yt-dlp with:\n\n" +
         "winget install yt-dlp.yt-dlp -e";
 
-    public static string YouTube403Hint =>
-        "YouTube returned HTTP 403 or only low quality (~360p) was available.\n" +
-        "Try:\n" +
-        "1. Update the app from GitHub Releases (bundled yt-dlp updates with each installer)\n" +
-        "2. winget upgrade yt-dlp.yt-dlp -e\n" +
-        "3. winget install DenoLand.Deno -e (then open a new terminal)\n" +
-        "4. Retry the download\n\n" +
-        "If quality is still capped, YouTube may require a PO token for your network. " +
-        "See: https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide";
+    public static string? TryGetYtDlpVersion(string? ytDlpPath)
+    {
+        if (string.IsNullOrWhiteSpace(ytDlpPath))
+            return null;
+
+        if (_cachedYtDlpVersion is not null)
+            return _cachedYtDlpVersion;
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = ytDlpPath,
+                Arguments = "--version",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true,
+            });
+            if (process is null)
+                return null;
+
+            var version = process.StandardOutput.ReadToEnd().Trim();
+            process.WaitForExit(5000);
+            if (!string.IsNullOrWhiteSpace(version))
+                _cachedYtDlpVersion = version;
+            return string.IsNullOrWhiteSpace(version) ? null : version;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static string DescribeToolsStatus(ToolCheckResult tools)
+    {
+        var lines = new List<string>();
+        if (tools.YtDlpFound)
+        {
+            var version = TryGetYtDlpVersion(tools.YtDlpPath);
+            lines.Add(version is null
+                ? $"yt-dlp: {tools.YtDlpPath}"
+                : $"yt-dlp {version}: {tools.YtDlpPath}");
+        }
+        else
+            lines.Add("yt-dlp: not found");
+
+        lines.Add(tools.FfmpegFound ? $"ffmpeg: {tools.FfmpegPath}" : "ffmpeg: not found");
+        lines.Add(tools.DenoFound
+            ? $"Deno: {tools.DenoPath} (YouTube JS — recommended)"
+            : "Deno: not on PATH — winget install DenoLand.Deno -e, then restart the app");
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    public static string BuildYouTube403Hint(ToolCheckResult tools, DownloadFormat format)
+    {
+        var steps = new List<string> { "YouTube returned HTTP 403 or blocked the selected format." };
+
+        steps.Add("Try:");
+        steps.Add("1. Retry the download once");
+        steps.Add("2. Update the app from GitHub Releases (refreshes bundled yt-dlp)");
+
+        if (!tools.DenoFound)
+            steps.Add("3. winget install DenoLand.Deno -e, then restart the app (required for YouTube in 2026)");
+        else if (DownloadFormats.IsVideo(format))
+            steps.Add("3. For MP4, try a lower quality preset if only audio streams are returned");
+        else
+            steps.Add("3. Check DIAG: lines in the log file for player_client and format details");
+
+        steps.Add("4. See the log file for full yt-dlp output and DIAG diagnostics");
+
+        steps.Add("");
+        steps.Add("If it still fails, YouTube may require a PO token for your network. " +
+                  "See: https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide");
+
+        return string.Join(Environment.NewLine, steps);
+    }
 
     public static string YouTubeMusicFormatHint =>
         "YouTube Music album — no audio formats were returned.\n\n" +

@@ -57,6 +57,11 @@ Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
 
+[Registry]
+Root: HKCU; Subkey: "Software\Classes\youtubetomp3"; ValueType: string; ValueName: ""; ValueData: "URL:YouTube Downloader"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\youtubetomp3"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\youtubetomp3\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" --minimized --extension-wake ""%1"""; Flags: uninsdeletekey
+
 [Code]
 const
   APP_UNINSTALL_SUBKEY = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{C8E4A1F2-9B3D-4E5F-A6C7-1D2E3F4A5B6C}_is1';

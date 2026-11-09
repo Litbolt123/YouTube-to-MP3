@@ -17,6 +17,19 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "wake-app") {
+    chrome.tabs.create({ url: YTDL_WAKE_URL, active: false }, (tab) => {
+      const tabId = tab?.id;
+      setTimeout(() => {
+        if (tabId) {
+          chrome.tabs.remove(tabId).catch(() => {});
+        }
+      }, 1200);
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (message?.type === "queue-download") {
     ytdlRequestApp("/download", {
       method: "POST",
@@ -38,6 +51,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     ytdlRequestApp("/check", {
       method: "POST",
       body: JSON.stringify({ url: message.url }),
+    })
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((error) => sendResponse({ ok: false, error: ytdlConnectionError(error) }));
+    return true;
+  }
+
+  if (message?.type === "probe-formats") {
+    ytdlRequestApp("/formats", {
+      method: "POST",
+      body: JSON.stringify({ url: message.url }),
+    })
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((error) => sendResponse({ ok: false, error: ytdlConnectionError(error) }));
+    return true;
+  }
+
+  if (message?.type === "watch-status") {
+    ytdlRequestApp("/status", {
+      method: "POST",
+      body: JSON.stringify({ url: message.url }),
+      retry: false,
     })
       .then((data) => sendResponse({ ok: true, data }))
       .catch((error) => sendResponse({ ok: false, error: ytdlConnectionError(error) }));

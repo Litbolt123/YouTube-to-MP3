@@ -1,4 +1,4 @@
-## YouTube Downloader 2.1.0
+## YouTube Downloader 2.1.1
 
 ### Highlights
 - **Cleaner audio:** Prefer AAC sources for MP3/FLAC to reduce crackle; FLAC cover embed uses audio-only copy (no remux glitches).
@@ -7,9 +7,9 @@
 - **Download history:** Grouped album view and improved history browsing.
 
 ### Install
-Download **YouTubeToMp3-Setup-2.1.0.exe** below. Settings in `%LocalAppData%\YouTubeToMp3` are preserved.
+Download **YouTubeToMp3-Setup-2.1.1.exe** below. Settings in `%LocalAppData%\YouTubeToMp3` are preserved.
 
 ### Verify
-1. Settings → About shows **2.1.0**.
+1. Settings → About shows **2.1.1**.
 2. Download a FLAC track with embed cover enabled — file should land in your library with artwork.
 3. Play the file in Local Music Hub — no bass/treble crackle vs browser playback.

@@ -32,13 +32,36 @@ public sealed class TrayIconService : IDisposable
         menu.Opening += (_, _) => RefreshStartWithWindowsItem();
     }
 
+    private void RunOnUi(Action action)
+    {
+        var dispatcher = _window?.Dispatcher ?? Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            action();
+            return;
+        }
+
+        if (dispatcher.CheckAccess())
+            action();
+        else
+            dispatcher.BeginInvoke(action);
+    }
+
     private ContextMenuStrip BuildMenu()
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add(TrayIconAssets.CreateHeader("YouTube Downloader"));
         menu.Items.Add("Open downloader", null, (_, _) => ShowWindow());
-        menu.Items.Add("View queue", null, (_, _) => _window?.ShowQueue());
-        menu.Items.Add("Download history", null, (_, _) => _window?.ShowHistory());
+        menu.Items.Add("View queue", null, (_, _) => RunOnUi(() =>
+        {
+            ShowMainWindow();
+            _window?.ShowQueue();
+        }));
+        menu.Items.Add("Download history", null, (_, _) => RunOnUi(() =>
+        {
+            ShowMainWindow();
+            _window?.ShowHistory();
+        }));
         menu.Items.Add("Open music folder", null, (_, _) => OpenMusicFolder());
         menu.Items.Add("Open videos folder", null, (_, _) => OpenVideosFolder());
         menu.Items.Add(new ToolStripSeparator());
@@ -102,6 +125,7 @@ public sealed class TrayIconService : IDisposable
             return;
 
         _window.Hide();
+        _window.WindowState = WindowState.Normal;
         _icon.Visible = true;
         _icon.ShowBalloonTip(
             2500,
@@ -165,15 +189,113 @@ public sealed class TrayIconService : IDisposable
 
     public void ShowMainWindow()
     {
+        RunOnUi(RestoreMainWindow);
+    }
+
+    private void RestoreMainWindow()
+    {
         if (_window is null)
             return;
 
+        _window.PrepareVisibleRestore();
+        _window.ShowInTaskbar = true;
+        _window.ShowActivated = true;
+        _window.Visibility = Visibility.Visible;
+        if (_window.WindowState == WindowState.Minimized)
+            _window.WindowState = WindowState.Normal;
         _window.Show();
         _window.WindowState = WindowState.Normal;
         _window.Activate();
+        _window.Focus();
     }
 
     private void ShowWindow() => ShowMainWindow();
+
+    public void NotifyExtensionDownloadQueued(string summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary))
+            summary = "Download queued from browser.";
+
+        if (summary.Length > 120)
+            summary = summary[..117] + "…";
+
+        try
+        {
+            if (!_icon.Visible)
+                _icon.Visible = true;
+
+            _icon.ShowBalloonTip(
+                3500,
+                "YouTube Downloader",
+                summary,
+                ToolTipIcon.Info);
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
+    public void NotifyExtensionDownloadSkipped(string reason)
+    {
+        try
+        {
+            if (!_icon.Visible)
+                return;
+
+            _icon.ShowBalloonTip(
+                3000,
+                "YouTube Downloader",
+                reason,
+                ToolTipIcon.Info);
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
+    public void NotifyExtensionDownloadFailed(string message)
+    {
+        try
+        {
+            if (!_icon.Visible)
+                _icon.Visible = true;
+
+            var text = string.IsNullOrWhiteSpace(message) ? "Extension download failed." : message;
+            if (text.Length > 120)
+                text = text[..117] + "…";
+
+            _icon.ShowBalloonTip(
+                4000,
+                "YouTube Downloader",
+                text,
+                ToolTipIcon.Warning);
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
+    public void ShowIdleExitBalloon(int idleMinutes)
+    {
+        if (!_icon.Visible)
+            return;
+
+        try
+        {
+            _icon.ShowBalloonTip(
+                2500,
+                "YouTube Downloader",
+                $"Closed after {idleMinutes} minutes idle. The browser extension will wake it when needed.",
+                ToolTipIcon.Info);
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
 
     private static void OpenMusicFolder() => OpenResolvedFolder(ContentKind.Music, DownloadFormat.Mp3);
 
@@ -193,12 +315,13 @@ public sealed class TrayIconService : IDisposable
         }
     }
 
-    private static void ExitApp()
+    private void ExitApp()
     {
-        if (Application.Current?.MainWindow is MainWindow mw)
-            mw.ForceExit();
-
-        Application.Current?.Shutdown();
+        RunOnUi(() =>
+        {
+            _window?.ForceExit();
+            Application.Current?.Shutdown();
+        });
     }
 
     public void Dispose()

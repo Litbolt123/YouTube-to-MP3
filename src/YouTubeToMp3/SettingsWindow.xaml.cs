@@ -30,9 +30,11 @@ public partial class SettingsWindow
         MusicFolderBox.Text = s.MusicOutputFolder;
         VideosFolderBox.Text = s.VideosOutputFolder;
         SelectFormat(s.PreferredFormat);
+        MatchVideoToScreenBox.IsChecked = s.MatchVideoToScreen;
         EmbedThumbnailBox.IsChecked = s.EmbedThumbnail;
         AlwaysAskCoverArtBox.IsChecked = s.AlwaysAskCoverArt;
         ReviewAlbumTracksBox.IsChecked = s.ReviewAlbumTracksBeforeDownload;
+        ReviewSongDetailsBox.IsChecked = s.ReviewSongDetailsBeforeDownload;
         ShowLogPanelBox.IsChecked = s.ShowLogPanel;
         ShowMainScreenHintsBox.IsChecked = s.ShowMainScreenHints;
         UseSubfoldersBox.IsChecked = s.UseContentSubfolders;
@@ -43,6 +45,9 @@ public partial class SettingsWindow
         StartWithWindowsBox.IsChecked = AutoStartService.IsEnabled() || s.StartWithWindows;
         NotifyQueueBox.IsChecked = s.NotifyOnQueueComplete;
         SkipAlreadyDownloadedBox.IsChecked = s.SkipAlreadyDownloaded;
+        SelectExtensionButtonAfter(s.ExtensionButtonAfterDownload);
+        ExtensionButtonResetSecondsBox.Text = s.ExtensionButtonResetSeconds.ToString(CultureInfo.InvariantCulture);
+        UpdateExtensionButtonResetSecondsVisibility();
         MaxParallelBox.Text = s.MaxParallelDownloads.ToString(CultureInfo.InvariantCulture);
         ConcurrentFragmentsBox.Text = s.ConcurrentFragments.ToString(CultureInfo.InvariantCulture);
         PlaySoundBox.IsChecked = s.PlaySoundOnComplete;
@@ -53,17 +58,23 @@ public partial class SettingsWindow
             s.BrowserExtensionEnabled
                 ? $"Listening on http://127.0.0.1:{s.BrowserExtensionPort}/ when the app is open."
                 : "Local API disabled — browser extension and Local Music Hub cannot queue downloads.";
+        SelectBackgroundRunMode(s.BackgroundRunMode);
+        IdleTimeoutBox.Text = s.IdleTimeoutMinutes.ToString(CultureInfo.InvariantCulture);
+        UpdateIdleTimeoutPanelVisibility();
         MusicHubStatusText.Text = LocalMusicHubIntegration.DescribeStatus(
             LocalMusicHubIntegration.GetLinkStatus(s.MusicOutputFolder));
         AutoCheckBox.IsChecked = s.AutoCheckUpdates;
         NotifyTrayOnUpdateBox.IsChecked = s.NotifyTrayOnUpdate;
+        var tools = ToolDependencyService.Check();
         AboutText.Text =
             $"Version {App.VersionDisplay}\n" +
             $"Settings: {AppPaths.DataDirectory}\n" +
             $"Download logs: {AppPaths.LogsDirectory}\n" +
             $"History: {AppPaths.HistoryPath}\n\n" +
+            ToolDependencyService.DescribeToolsStatus(tools) + "\n\n" +
+            "Browser extension: load unpacked from the app's browser-extension folder (v1.5.2).\n" +
             "Pairs with Local Music Hub (v0.3+) to auto-import music downloads into your library.\n" +
-            "Requires yt-dlp and ffmpeg on your PATH (install once with winget).";
+            "Uses yt-dlp and ffmpeg (bundled in tools\\).";
         UpdateStatusText.Text = "Check GitHub for a newer installer.";
     }
 
@@ -73,7 +84,9 @@ public partial class SettingsWindow
             return;
 
         var format = GetSelectedFormat();
-        var quality = DownloadFormats.IsVideo(format) ? App.Settings.VideoQuality : App.Settings.AudioQuality;
+        var quality = DownloadFormats.IsVideo(format)
+            ? QualityPresets.DefaultVideoQuality(App.Settings)
+            : App.Settings.AudioQuality;
         QualityPresets.ApplyToCombo(QualityCombo, format, quality);
     }
 
@@ -84,11 +97,96 @@ public partial class SettingsWindow
         DownloadFormats.SelectInCombo(FormatCombo, preferred);
 
         var format = DownloadFormats.FromTag(preferred);
-        var quality = DownloadFormats.IsVideo(format) ? App.Settings.VideoQuality : App.Settings.AudioQuality;
+        var quality = DownloadFormats.IsVideo(format)
+            ? QualityPresets.DefaultVideoQuality(App.Settings)
+            : App.Settings.AudioQuality;
         QualityPresets.ApplyToCombo(QualityCombo, format, quality);
     }
 
     private int GetSelectedQuality() => QualityPresets.GetSelectedQuality(QualityCombo);
+
+    private void SelectBackgroundRunMode(BackgroundRunMode mode)
+    {
+        foreach (var item in BackgroundRunModeCombo.Items.OfType<ComboBoxItem>())
+        {
+            var tag = item.Tag as string;
+            var selected = mode == BackgroundRunMode.IdleTimeout
+                ? string.Equals(tag, "idle", StringComparison.OrdinalIgnoreCase)
+                : string.Equals(tag, "always", StringComparison.OrdinalIgnoreCase);
+            if (selected)
+            {
+                BackgroundRunModeCombo.SelectedItem = item;
+                return;
+            }
+        }
+    }
+
+    private BackgroundRunMode GetSelectedBackgroundRunMode()
+    {
+        if (BackgroundRunModeCombo.SelectedItem is ComboBoxItem item &&
+            string.Equals(item.Tag as string, "idle", StringComparison.OrdinalIgnoreCase))
+        {
+            return BackgroundRunMode.IdleTimeout;
+        }
+
+        return BackgroundRunMode.AlwaysOn;
+    }
+
+    private void BackgroundRunModeCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded)
+            return;
+        UpdateIdleTimeoutPanelVisibility();
+    }
+
+    private void UpdateIdleTimeoutPanelVisibility()
+    {
+        IdleTimeoutPanel.Visibility = GetSelectedBackgroundRunMode() == BackgroundRunMode.IdleTimeout
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void ExtensionButtonAfterCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded)
+            return;
+        UpdateExtensionButtonResetSecondsVisibility();
+    }
+
+    private void UpdateExtensionButtonResetSecondsVisibility()
+    {
+        ExtensionButtonResetSecondsPanel.Visibility =
+            string.Equals(GetSelectedExtensionButtonAfter(), "resetAfterSeconds", StringComparison.OrdinalIgnoreCase)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+    }
+
+    private void SelectExtensionButtonAfter(string? mode)
+    {
+        var wantReset = string.Equals(mode, "resetAfterSeconds", StringComparison.OrdinalIgnoreCase);
+        foreach (var item in ExtensionButtonAfterCombo.Items.OfType<ComboBoxItem>())
+        {
+            var tag = item.Tag as string;
+            var selected = wantReset
+                ? string.Equals(tag, "resetAfterSeconds", StringComparison.OrdinalIgnoreCase)
+                : string.Equals(tag, "keepUntilFileGone", StringComparison.OrdinalIgnoreCase);
+            if (selected)
+            {
+                ExtensionButtonAfterCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (ExtensionButtonAfterCombo.Items.Count > 0)
+            ExtensionButtonAfterCombo.SelectedIndex = 0;
+    }
+
+    private string GetSelectedExtensionButtonAfter()
+    {
+        if (ExtensionButtonAfterCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            return tag;
+        return "keepUntilFileGone";
+    }
 
     private void BrowseFolder_OnClick(object sender, RoutedEventArgs e) =>
         BrowseInto(FolderBox, FolderBox.Text);
@@ -324,9 +422,11 @@ public partial class SettingsWindow
             PreferredFormat = DownloadFormats.ToTag(format),
             AudioQuality = DownloadFormats.IsVideo(format) ? App.Settings.AudioQuality : quality,
             VideoQuality = DownloadFormats.IsVideo(format) ? quality : App.Settings.VideoQuality,
+            MatchVideoToScreen = MatchVideoToScreenBox.IsChecked == true,
             EmbedThumbnail = EmbedThumbnailBox.IsChecked == true,
             AlwaysAskCoverArt = AlwaysAskCoverArtBox.IsChecked == true,
             ReviewAlbumTracksBeforeDownload = ReviewAlbumTracksBox.IsChecked == true,
+            ReviewSongDetailsBeforeDownload = ReviewSongDetailsBox.IsChecked == true,
             ShowLogPanel = ShowLogPanelBox.IsChecked == true,
             ShowMainScreenHints = ShowMainScreenHintsBox.IsChecked == true,
             UseContentSubfolders = UseSubfoldersBox.IsChecked == true,
@@ -337,12 +437,16 @@ public partial class SettingsWindow
             StartWithWindows = StartWithWindowsBox.IsChecked == true,
             NotifyOnQueueComplete = NotifyQueueBox.IsChecked == true,
             SkipAlreadyDownloaded = SkipAlreadyDownloadedBox.IsChecked == true,
+            ExtensionButtonAfterDownload = GetSelectedExtensionButtonAfter(),
+            ExtensionButtonResetSeconds = ParseClampedInt(ExtensionButtonResetSecondsBox.Text, 1, 60, 5),
             MaxParallelDownloads = ParseClampedInt(MaxParallelBox.Text, 1, 5, 1),
             ConcurrentFragments = ParseClampedInt(ConcurrentFragmentsBox.Text, 0, 8, 4),
             PlaySoundOnComplete = PlaySoundBox.IsChecked == true,
             BrowserExtensionEnabled = BrowserExtensionBox.IsChecked == true,
             BrowserExtensionPort = ParseExtensionPort(),
             BrowserExtensionToken = ExtensionTokenBox.Text.Trim(),
+            BackgroundRunMode = GetSelectedBackgroundRunMode(),
+            IdleTimeoutMinutes = ParseClampedInt(IdleTimeoutBox.Text, 5, 120, 15),
             AutoCheckUpdates = AutoCheckBox.IsChecked == true,
             NotifyTrayOnUpdate = NotifyTrayOnUpdateBox.IsChecked == true,
             AutoQueueWhenBusy = true,

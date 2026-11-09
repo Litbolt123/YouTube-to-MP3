@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "YouTube Downloader Bridge",
-  "version": "1.4.5",
+  "version": "1.5.2",
   "description": "Send YouTube videos to the YouTube Downloader desktop app (audio and video).",
-  "permissions": ["storage", "alarms"],
+  "permissions": ["storage", "alarms", "tabs"],
   "background": {
     "service_worker": "background.js"
   },
@@ -22,6 +22,15 @@
     "open_in_tab": true
   },
   "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*"
+      ],
+      "js": ["page-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": [
         "https://www.youtube.com/*",

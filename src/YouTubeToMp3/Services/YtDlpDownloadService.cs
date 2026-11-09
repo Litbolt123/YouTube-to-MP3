@@ -158,6 +158,20 @@ public sealed class YtDlpDownloadService : IDisposable
             }
         };
 
+        EmitDiagnostics(DownloadDiagnostics.BuildPreflight(
+            tools,
+            url,
+            format,
+            scope,
+            contentKind,
+            audioQuality,
+            concurrentFragments,
+            useDownloadArchive,
+            embedYtThumbnail,
+            outputTemplate,
+            metadataOverride));
+        EmitDiagnostics(DownloadDiagnostics.FormatCommand(tools.YtDlpPath!, args));
+
         if (!_process.Start())
             throw new InvalidOperationException("Could not start yt-dlp.");
 
@@ -208,6 +222,8 @@ public sealed class YtDlpDownloadService : IDisposable
             ? DownloadStagingService.MapToFinalPath(stagingDir, outputFolder, stagedMedia[^1])
             : DownloadStagingService.MapToFinalPath(stagingDir, outputFolder, stagingOutputFile);
 
+        EmitDiagnostics(DownloadDiagnostics.BuildRunSummary(allLines, _process.ExitCode, format, tools, success));
+
         if (!success)
         {
             DownloadStagingService.TryDeleteStagingDirectory(stagingDir);
@@ -216,7 +232,7 @@ public sealed class YtDlpDownloadService : IDisposable
                 Success = false,
                 ExitCode = _process.ExitCode,
                 OutputPath = outputFile,
-                ErrorMessage = BuildErrorMessage(stderr, _process.ExitCode),
+                ErrorMessage = BuildErrorMessage(stderr, _process.ExitCode, format),
                 Format = format,
                 Scope = scope,
                 ContentKind = contentKind,
@@ -230,7 +246,11 @@ public sealed class YtDlpDownloadService : IDisposable
             : null;
 
         string? coverError = null;
-        if (useCustomCover || embedYtThumbnail)
+        // yt-dlp --embed-thumbnail already stamps MP4 via mutagen. A second ffmpeg pass
+        // on that file logs "Conversion failed!" even though the download succeeded.
+        var needsAppCoverEmbed = useCustomCover ||
+                                 (embedYtThumbnail && DownloadFormats.IsAudio(format));
+        if (needsAppCoverEmbed)
         {
             try
             {
@@ -329,7 +349,7 @@ public sealed class YtDlpDownloadService : IDisposable
             OutputPath = outputFile,
             ErrorMessage = success
                 ? JoinWarnings(partialWarning, coverError)
-                : commitError ?? coverError ?? BuildErrorMessage(stderr, _process.ExitCode),
+                : commitError ?? coverError ?? BuildErrorMessage(stderr, _process.ExitCode, format),
             Format = format,
             Scope = scope,
             ContentKind = contentKind,
@@ -367,6 +387,7 @@ public sealed class YtDlpDownloadService : IDisposable
     {
         var sb = new StringBuilder();
         sb.Append("--newline --progress --ignore-errors --force-overwrites ");
+        sb.Append("--socket-timeout 20 ");
         sb.Append("--output-na-placeholder \"\" ");
         sb.Append("--embed-metadata ");
         AppendMetadataOverrides(sb, metadataOverride);
@@ -413,9 +434,10 @@ public sealed class YtDlpDownloadService : IDisposable
         }
         else
         {
-            var formatSelector = QualityPresets.GetMp4FormatSelector(audioQuality);
+            var formatSelector = QualityPresets.GetMp4FormatSelector(audioQuality, App.Settings.MatchVideoToScreen);
             sb.Append($"-f \"{formatSelector}\" ");
             sb.Append("--merge-output-format mp4 ");
+            sb.Append("--remux-video mp4 ");
             // Re-encode to AAC if only Opus audio is available — Windows Media Player cannot play Opus in MP4.
             sb.Append("--postprocessor-args \"Merger+ffmpeg_o:-c:a aac -b:a 192k\" ");
         }
@@ -468,14 +490,19 @@ public sealed class YtDlpDownloadService : IDisposable
         return string.IsNullOrWhiteSpace(joined) ? null : joined;
     }
 
-    private static string BuildErrorMessage(IReadOnlyList<string> stderr, int exitCode)
+    private static string BuildErrorMessage(
+        IReadOnlyList<string> stderr,
+        int exitCode,
+        DownloadFormat format)
     {
         var last = stderr.LastOrDefault() ?? $"yt-dlp exited with code {exitCode}.";
         var combined = string.Join('\n', stderr);
         if (combined.Contains("403", StringComparison.Ordinal) &&
             combined.Contains("Forbidden", StringComparison.OrdinalIgnoreCase))
         {
-            return last + Environment.NewLine + Environment.NewLine + ToolDependencyService.YouTube403Hint;
+            var tools = ToolDependencyService.Check();
+            return last + Environment.NewLine + Environment.NewLine +
+                   ToolDependencyService.BuildYouTube403Hint(tools, format);
         }
 
         if (combined.Contains("Only images are available", StringComparison.OrdinalIgnoreCase) ||
@@ -506,6 +533,12 @@ public sealed class YtDlpDownloadService : IDisposable
         {
             /* ignore */
         }
+    }
+
+    private void EmitDiagnostics(IEnumerable<string> lines)
+    {
+        foreach (var line in lines)
+            Progress?.Invoke(this, new DownloadProgressEventArgs { Line = line });
     }
 
     private void HandleLine(string? line, DownloadFormat format)

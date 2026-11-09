@@ -16,6 +16,7 @@ async function save() {
 }
 
 async function testConnection() {
+  ytdlWakeAppSync();
   await save();
   statusEl.textContent = "Testing…";
   const result = await ytdlHealthCheck();

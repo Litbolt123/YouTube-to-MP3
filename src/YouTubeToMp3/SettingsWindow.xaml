@@ -37,8 +37,11 @@
 
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="Default quality" Width="120" Style="{DynamicResource DashSettingLabel}"/>
-                        <ComboBox x:Name="QualityCombo" Width="220" Style="{DynamicResource DashComboBox}" DisplayMemberPath="Content"/>
+                        <ComboBox x:Name="QualityCombo" Width="280" Style="{DynamicResource DashComboBox}" DisplayMemberPath="Content"/>
                     </StackPanel>
+                    <CheckBox x:Name="MatchVideoToScreenBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Match video downloads to this screen (don't fetch 4K on a 1080p display)"
+                              ToolTip="When default quality is Best or Match screen, cap MP4 height to this monitor. Pick a specific resolution in the quality list to override."/>
 
                     <CheckBox x:Name="EmbedThumbnailBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
                               Content="Embed thumbnail as cover art by default"/>
@@ -48,6 +51,9 @@
                     <CheckBox x:Name="ReviewAlbumTracksBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
                               Content="Review album track details before downloading music playlists"
                               ToolTip="Opens a track editor to confirm or fix artist, album, and title for each song before download."/>
+                    <CheckBox x:Name="ReviewSongDetailsBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
+                              Content="Review song details before single-track music downloads"
+                              ToolTip="Opens the song editor when you click This song only. You can also use Edit song details anytime."/>
                     <CheckBox x:Name="ShowLogPanelBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,16"
                               Content="Show download log on home screen"
                               ToolTip="When off, use Show log on the status bar for a temporary peek."/>
@@ -67,25 +73,25 @@
                         <TextBox x:Name="VideosSubfolderBox" Width="160" Height="30" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"/>
                     </StackPanel>
 
-                    <TextBlock Text="MP3 / audio downloads" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Audio downloads (MP3, M4A, FLAC, …)" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
                     <Grid Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="MusicFolderBox" Height="30" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
-                                 ToolTip="Full path for MP3 downloads. Empty = default save folder."/>
+                                 ToolTip="Full path for audio downloads (MP3, M4A, FLAC, etc.). Empty = default save folder."/>
                         <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Padding="12,6"
                                 Style="{DynamicResource DashToolbarButton}" Click="BrowseMusicFolder_OnClick"/>
                     </Grid>
-                    <TextBlock Text="MP4 / video downloads" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Video downloads (MP4)" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
                     <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="VideosFolderBox" Height="30" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
-                                 ToolTip="Full path for MP4 downloads. Empty = default save folder."/>
+                                 ToolTip="Full path for video downloads (MP4). Empty = default save folder."/>
                         <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Padding="12,6"
                                 Style="{DynamicResource DashToolbarButton}" Click="BrowseVideosFolder_OnClick"/>
                     </Grid>
@@ -122,7 +128,22 @@
                         <Button Content="Open Music Hub data" Style="{DynamicResource DashToolbarButton}" Click="OpenMusicHubData_OnClick"/>
                         <Button Content="Test connection" Style="{DynamicResource DashToolbarButton}" Click="TestExtension_OnClick"/>
                     </WrapPanel>
-                    <TextBlock x:Name="ExtensionStatusText" Style="{DynamicResource DashHintText}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="ExtensionStatusText" Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <TextBlock Text="Background presence" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="BackgroundRunModeCombo" Width="320" Style="{DynamicResource DashComboBox}" Margin="0,0,0,8"
+                              SelectionChanged="BackgroundRunModeCombo_OnSelectionChanged">
+                        <ComboBoxItem Content="Always on — keep running in tray" Tag="always"/>
+                        <ComboBoxItem Content="Auto-quit when idle — extension wakes the app" Tag="idle"/>
+                    </ComboBox>
+                    <StackPanel x:Name="IdleTimeoutPanel" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Idle timeout" Width="120" Style="{DynamicResource DashSettingLabel}" VerticalAlignment="Center"/>
+                        <TextBox x:Name="IdleTimeoutBox" Width="60" Height="30" Style="{DynamicResource DashTextBox}"
+                                 VerticalContentAlignment="Center" Padding="8,0"
+                                 ToolTip="Minutes with no downloads or extension use before the app quits (5–120)"/>
+                        <TextBlock Text="minutes (5–120)" Margin="8,0,0,0" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Style="{DynamicResource DashHintText}" Margin="0,0,0,12" TextWrapping="Wrap"
+                               Text="With auto-quit, the browser extension launches the app via youtubetomp3:// when you click Download. Closing the window minimizes to tray until idle timeout."/>
 
                     <Separator Margin="0,0,0,12"/>
                     <TextBlock Text="Appearance" Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,10"/>
@@ -133,7 +154,8 @@
                     <CheckBox x:Name="MinimizeToTrayBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
                               Content="Minimize to system tray instead of closing"/>
                     <CheckBox x:Name="StartWithWindowsBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
-                              Content="Start with Windows (opens in system tray)"/>
+                              Content="Start with Windows (opens in system tray)"
+                              ToolTip="Also enables minimize to tray when this is on."/>
                     <CheckBox x:Name="NotifyQueueBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,16"
                               Content="Notify when the whole queue finishes (tray)"/>
 
@@ -142,6 +164,19 @@
                     <CheckBox x:Name="SkipAlreadyDownloadedBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
                               Content="Skip already-downloaded URLs (history / existing file)"
                               ToolTip="When on, duplicates are skipped automatically. Uncheck or use force redownload to download again."/>
+                    <TextBlock Text="YouTube page button after a download" Style="{DynamicResource DashHintText}" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="ExtensionButtonAfterCombo" Width="440" Style="{DynamicResource DashComboBox}" Margin="0,0,0,8"
+                              SelectionChanged="ExtensionButtonAfterCombo_OnSelectionChanged">
+                        <ComboBoxItem Content="Keep saying Downloaded until you delete the file" Tag="keepUntilFileGone"/>
+                        <ComboBoxItem Content="After a few seconds, say Download again (mark if downloaded before)" Tag="resetAfterSeconds"/>
+                    </ComboBox>
+                    <StackPanel x:Name="ExtensionButtonResetSecondsPanel" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Reset after" Width="120" Style="{DynamicResource DashSettingLabel}" VerticalAlignment="Center"/>
+                        <TextBox x:Name="ExtensionButtonResetSecondsBox" Width="60" Height="30" Style="{DynamicResource DashTextBox}"
+                                 VerticalContentAlignment="Center" Padding="8,0"
+                                 ToolTip="Seconds to show Downloaded before the YouTube button returns to Download"/>
+                        <TextBlock Text="seconds (1–60)" Margin="8,0,0,0" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"/>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="Parallel downloads" Width="160" Style="{DynamicResource DashSettingLabel}" VerticalAlignment="Center"/>
                         <TextBox x:Name="MaxParallelBox" Width="60" Height="30" Style="{DynamicResource DashTextBox}"
@@ -153,8 +188,8 @@
                         <TextBlock Text="Concurrent fragments" Width="160" Style="{DynamicResource DashSettingLabel}" VerticalAlignment="Center"/>
                         <TextBox x:Name="ConcurrentFragmentsBox" Width="60" Height="30" Style="{DynamicResource DashTextBox}"
                                  VerticalContentAlignment="Center" Padding="8,0"
-                                 ToolTip="Concurrent download fragments (1–8, higher can be faster). 1 disables."/>
-                        <TextBlock Text="(1–8)" Margin="8,0,0,0" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"/>
+                                 ToolTip="Concurrent download fragments per file (0 or 1 = off, 2–8 can be faster)."/>
+                        <TextBlock Text="(0–8)" Margin="8,0,0,0" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"/>
                     </StackPanel>
                     <TextBlock Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
                                Text="Parallel downloads also run conversions/cover embeds at the same time (one yt-dlp job per slot). Concurrent fragments speed up a single file."/>

@@ -146,9 +146,9 @@
                             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                                 <TextBlock Text="Filename preview" Style="{DynamicResource DashSettingLabel}" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="PreviewHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,4" TextWrapping="Wrap" FontSize="11"
-                                           Text="Edit the name before downloading (single video only)."/>
+                                           Text="Edit the name before downloading (single URL only)."/>
                                 <TextBox x:Name="FilenamePreviewBox" Height="28" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
-                                         ToolTip="Edit before downloading (single URL, single video only)" TextChanged="FilenamePreviewBox_OnTextChanged"/>
+                                         ToolTip="Edit before downloading (one URL at a time)" TextChanged="FilenamePreviewBox_OnTextChanged"/>
                             </StackPanel>
                         </Grid>
 
@@ -165,7 +165,7 @@
                                     <Button x:Name="ChooseCoverArtButton" Content="Choose cover…" Padding="10,5" Margin="0,0,8,0"
                                             Style="{DynamicResource DashToolbarButton}" Click="ChooseCoverArt_OnClick"/>
                                     <TextBlock x:Name="CoverArtStatusText" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"
-                                               Text="Cover: video default" FontSize="11"/>
+                                               Text="Cover: thumbnail default" FontSize="11"/>
                                 </WrapPanel>
                                 <TextBox x:Name="CoverUrlBox" Height="28" Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center"
                                          Padding="8,0"
@@ -195,14 +195,19 @@
                         <TextBlock x:Name="ActionsSectionHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
                                    Text="Start a download. The main buttons change based on your link (single video, playlist, or album)."/>
                         <TextBlock x:Name="ActionsDetailHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,10" TextWrapping="Wrap" FontSize="11"
-                                   Text="This video only — one track. Whole playlist — every video in the list. Review album — choose tracks before a YouTube Music album download."/>
+                                   Text="Buttons adapt to your link: song/video only, whole album/playlist, edit song details, or review album tracks before download."/>
                         <WrapPanel>
                             <Button x:Name="DownloadVideoButton" Content="This video only" Padding="18,10" Margin="0,0,8,8"
                                     Style="{DynamicResource DashPrimaryButton}" Click="DownloadVideo_OnClick"/>
                             <Button x:Name="DownloadPlaylistButton" Content="Whole playlist" Padding="18,10" Margin="0,0,8,8"
                                     Style="{DynamicResource DashPrimaryButton}" Click="DownloadPlaylist_OnClick"/>
+                            <Button x:Name="EditSongDetailsButton" Content="Edit song details…" Padding="14,10" Margin="0,0,8,8"
+                                    Style="{DynamicResource DashToolbarButton}" Click="EditSongDetails_OnClick"
+                                    ToolTip="Fix title, artist, and album tags before downloading this song"
+                                    Visibility="Collapsed"/>
                             <Button x:Name="ReviewAlbumButton" Content="Review album…" Padding="14,10" Margin="0,0,8,8"
-                                    Style="{DynamicResource DashToolbarButton}" Click="ReviewAlbum_OnClick"/>
+                                    Style="{DynamicResource DashToolbarButton}" Click="ReviewAlbum_OnClick"
+                                    Visibility="Collapsed"/>
                         </WrapPanel>
                         <WrapPanel>
                             <Button x:Name="CancelButton" Content="Cancel" Padding="12,6" Margin="0,0,8,0" IsEnabled="False"

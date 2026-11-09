@@ -53,8 +53,17 @@ public static class AutoStartService
         }
     }
 
-    public static bool ArgsRequestTray(IEnumerable<string> args) =>
+    public static bool ArgsRequestTray(IEnumerable<string> args)
+    {
+        var list = args as string[] ?? args.ToArray();
+        return list.Any(a =>
+                   string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(a, "--tray", StringComparison.OrdinalIgnoreCase)) ||
+               ArgsExtensionWake(list);
+    }
+
+    public static bool ArgsExtensionWake(IEnumerable<string> args) =>
         args.Any(a =>
-            string.Equals(a, "--minimized", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(a, "--tray", StringComparison.OrdinalIgnoreCase));
+            string.Equals(a, "--extension-wake", StringComparison.OrdinalIgnoreCase) ||
+            a.StartsWith("youtubetomp3:", StringComparison.OrdinalIgnoreCase));
 }

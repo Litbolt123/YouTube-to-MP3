@@ -45,7 +45,7 @@ public static class QueueDisplayHelper
     }
 
     public static string ScopeFor(DownloadJob job) =>
-        job.Scope == DownloadScope.Playlist ? "Playlist" : "Single";
+        DownloadScopeLabels.ForJob(job);
 
     public static QueueRowViewModel ToRow(
         DownloadJob job,

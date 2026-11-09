@@ -70,6 +70,7 @@ public partial class MainWindow
     private readonly List<TimeSpan> _completedJobDurations = [];
     private readonly List<TimeSpan> _completedItemDurations = [];
     private bool _startMinimizedToTray;
+    private bool _trayStartCompleted;
     private string? _customCoverArtPath;
     private string? _coverBoundUrlIdentity;
     private bool _suppressCoverUrlChange;
@@ -78,8 +79,11 @@ public partial class MainWindow
     private bool _logPeekVisible;
     private bool _logForceHidden;
     private bool _applyingShowTips;
+    private SongDetailsResult? _pendingSongDetails;
+    private string? _pendingSongDetailsUrl;
     private bool _enrichingUrlFromDiscovery;
     private FileSystemWatcher? _activateSignalWatcher;
+    private readonly AppIdleMonitor _idleMonitor;
 
     private bool IsProcessing => _activeDownloads.Count > 0;
     private DownloadJob? PrimaryJob => _activeDownloads.FirstOrDefault(c => c.IsPrimary)?.Job
@@ -94,8 +98,14 @@ public partial class MainWindow
         DownloadFormats.PopulateCombo(FormatCombo);
         _history.Load();
         _tray.Attach(this);
-        _startMinimizedToTray = AutoStartService.ArgsRequestTray(Environment.GetCommandLineArgs());
-        if (App.Settings.MinimizeToTray || App.Settings.StartWithWindows || _startMinimizedToTray)
+        _idleMonitor = new AppIdleMonitor(
+            Dispatcher,
+            () => IsProcessing || _queue.Count > 0,
+            RequestIdleExit);
+        _startMinimizedToTray = AutoStartService.ArgsRequestTray(Environment.GetCommandLineArgs()) ||
+                                AutoStartService.ArgsExtensionWake(Environment.GetCommandLineArgs());
+        if (App.Settings.MinimizeToTray || App.Settings.StartWithWindows || _startMinimizedToTray ||
+            App.Settings.BackgroundRunMode == BackgroundRunMode.IdleTimeout)
             _tray.ShowTrayIcon();
 
         Loaded += MainWindow_OnLoaded;
@@ -106,6 +116,97 @@ public partial class MainWindow
         _queue.Changed += (_, _) => Dispatcher.Invoke(RefreshQueueUi);
         _extensionHost.DownloadRequested += ExtensionHost_OnDownloadRequested;
         _extensionHost.CheckUrl = CheckUrlForExtension;
+        _extensionHost.WatchUrl = GetExtensionJobStatus;
+        _extensionHost.OnActivity = NoteAppActivity;
+        PreviewMouseDown += (_, _) => NoteAppActivity();
+        KeyDown += (_, _) => NoteAppActivity();
+
+        // Start the local API before first paint so extension wake + download can connect immediately.
+        _extensionHost.ApplySettings(App.Settings);
+
+        if (_startMinimizedToTray)
+        {
+            ShowInTaskbar = false;
+            ShowActivated = false;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = -32000;
+            Top = -32000;
+            Opacity = 0;
+        }
+    }
+
+    public void HideToTrayAtStartup()
+    {
+        ShowInTaskbar = false;
+        ShowActivated = false;
+        _tray.ShowTrayIcon();
+
+        if (!_trayStartCompleted)
+        {
+            _trayStartCompleted = true;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Opacity = 0;
+            Left = -32000;
+            Top = -32000;
+            if (!IsLoaded)
+                Show();
+        }
+
+        Hide();
+        WindowState = WindowState.Normal;
+        Visibility = Visibility.Hidden;
+        ShowInTaskbar = false;
+        Opacity = 1;
+        RecenterOffscreenWindow();
+    }
+
+    public void PrepareVisibleRestore()
+    {
+        Opacity = 1;
+        ShowActivated = true;
+        ShowInTaskbar = true;
+        Visibility = Visibility.Visible;
+        RecenterOffscreenWindow();
+    }
+
+    private void RecenterOffscreenWindow()
+    {
+        if (Left > -1000 && Top > -1000)
+            return;
+
+        var work = SystemParameters.WorkArea;
+        var width = ActualWidth > 0 ? ActualWidth : Width;
+        var height = ActualHeight > 0 ? ActualHeight : Height;
+        Left = work.Left + Math.Max(0, (work.Width - width) / 2);
+        Top = work.Top + Math.Max(0, (work.Height - height) / 2);
+    }
+
+    private void NoteAppActivity() => _idleMonitor.NoteActivity();
+
+    private bool ShouldMinimizeToTrayOnClose =>
+        App.Settings.MinimizeToTray ||
+        App.Settings.StartWithWindows ||
+        App.Settings.BackgroundRunMode == BackgroundRunMode.IdleTimeout;
+
+    private void RequestIdleExit()
+    {
+        if (IsProcessing || _queue.Count > 0)
+        {
+            NoteAppActivity();
+            return;
+        }
+
+        try
+        {
+            _tray.ShowIdleExitBalloon(App.Settings.IdleTimeoutMinutes);
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        _forceClose = true;
+        System.Windows.Application.Current.Shutdown();
     }
 
     private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
@@ -122,13 +223,14 @@ public partial class MainWindow
         BrowserExtensionInstaller.EnsureInstalled();
         _extensionHost.ApplySettings(App.Settings);
         SetupActivateSignalWatcher();
+        _idleMonitor.ApplySettings();
         SyncShowTipsCheckbox();
         ApplyMainScreenHintsVisibility();
 
-        if (_startMinimizedToTray || (App.Settings.StartWithWindows && AutoStartService.ArgsRequestTray(Environment.GetCommandLineArgs())))
+        if (_startMinimizedToTray)
         {
-            _tray.ShowTrayIcon();
-            Hide();
+            HideToTrayAtStartup();
+            NoteAppActivity();
         }
 
         TryApplyCachedUpdate();
@@ -183,25 +285,45 @@ public partial class MainWindow
 
     private void ActivateFromSecondInstance()
     {
+        var extensionWake = false;
         try
         {
             if (File.Exists(SingleInstanceService.ActivateSignalPath))
+            {
+                var content = File.ReadAllText(SingleInstanceService.ActivateSignalPath).Trim();
+                extensionWake = string.Equals(
+                    content,
+                    SingleInstanceService.ExtensionWakeSignal,
+                    StringComparison.OrdinalIgnoreCase);
                 File.Delete(SingleInstanceService.ActivateSignalPath);
+            }
         }
         catch
         {
             /* ignore */
         }
 
+        NoteAppActivity();
+
+        if (extensionWake)
+        {
+            _tray.ShowTrayIcon();
+            return;
+        }
+
+        _extensionHost.ApplySettings(App.Settings);
         _tray.ShowMainWindow();
     }
 
     public void OnAutoStartChanged()
     {
-        if (App.Settings.StartWithWindows || App.Settings.MinimizeToTray)
+        if (App.Settings.StartWithWindows || App.Settings.MinimizeToTray ||
+            App.Settings.BackgroundRunMode == BackgroundRunMode.IdleTimeout)
             _tray.ShowTrayIcon();
         else if (!IsProcessing)
             _tray.HideTrayIcon();
+
+        _idleMonitor.ApplySettings();
     }
 
     private void ExtensionHost_OnDownloadRequested(object? sender, ExtensionDownloadRequest e)
@@ -210,13 +332,13 @@ public partial class MainWindow
         {
             try
             {
-                _tray.ShowMainWindow();
                 await EnqueueFromExtensionAsync(e).ConfigureAwait(true);
             }
             catch (Exception ex)
             {
                 StatusText.Text = "Extension download failed.";
                 AppendLog($"Extension download error: {ex.Message}");
+                _tray.NotifyExtensionDownloadFailed(ex.Message);
             }
         });
     }
@@ -225,18 +347,22 @@ public partial class MainWindow
     {
         _activateSignalWatcher?.Dispose();
         _activateSignalWatcher = null;
+        _idleMonitor.Dispose();
         _logService.Dispose();
         _extensionHost.Dispose();
         _tray.Dispose();
+        if (_forceClose || !ShouldMinimizeToTrayOnClose)
+            System.Windows.Application.Current.Shutdown();
     }
 
     private void MainWindow_OnClosing(object? sender, CancelEventArgs e)
     {
-        if (_forceClose || !(App.Settings.MinimizeToTray || App.Settings.StartWithWindows))
+        if (_forceClose || !ShouldMinimizeToTrayOnClose)
             return;
 
         e.Cancel = true;
-        _tray.MinimizeToTray();
+        // Defer Hide so WPF does not immediately re-close the cancelled shutdown.
+        Dispatcher.BeginInvoke(() => _tray.MinimizeToTray(), DispatcherPriority.Background);
     }
 
     public void ForceExit() => _forceClose = true;
@@ -337,6 +463,75 @@ public partial class MainWindow
         return DuplicateDetectionService.ToCheckResult(warning);
     }
 
+    private ExtensionJobStatus GetExtensionJobStatus(string url)
+    {
+        if (!Dispatcher.CheckAccess())
+            return Dispatcher.Invoke(() => GetExtensionJobStatus(url));
+
+        var after = App.Settings.ExtensionButtonAfterDownload;
+        var seconds = App.Settings.ExtensionButtonResetSeconds;
+        var prior = _history.FindByVideoId(url) ?? _history.FindByUrl(url);
+        var fileExists = prior is not null &&
+                         !string.IsNullOrWhiteSpace(prior.OutputPath) &&
+                         File.Exists(prior.OutputPath);
+
+        var active = _activeDownloads.FirstOrDefault(c => YouTubeUrlHelper.SameVideo(c.Job.Url, url));
+        if (active is not null)
+        {
+            return new ExtensionJobStatus
+            {
+                State = "downloading",
+                FileExists = fileExists,
+                DownloadedBefore = prior is not null,
+                Percent = active.Runtime.Percent,
+                Detail = active.Runtime.Status,
+                Title = active.Job.PredictedTitle ?? prior?.Title,
+                Path = prior?.OutputPath,
+                AfterDownload = after,
+                ResetSeconds = seconds,
+            };
+        }
+
+        if (_queue.Snapshot().Any(j => YouTubeUrlHelper.SameVideo(j.Url, url)))
+        {
+            return new ExtensionJobStatus
+            {
+                State = "queued",
+                FileExists = fileExists,
+                DownloadedBefore = prior is not null,
+                Title = prior?.Title,
+                Path = prior?.OutputPath,
+                AfterDownload = after,
+                ResetSeconds = seconds,
+            };
+        }
+
+        if (fileExists)
+        {
+            return new ExtensionJobStatus
+            {
+                State = "downloaded",
+                FileExists = true,
+                DownloadedBefore = true,
+                Title = prior?.Title,
+                Path = prior?.OutputPath,
+                AfterDownload = after,
+                ResetSeconds = seconds,
+            };
+        }
+
+        return new ExtensionJobStatus
+        {
+            State = "idle",
+            FileExists = false,
+            DownloadedBefore = prior is not null,
+            Title = prior?.Title,
+            Path = prior?.OutputPath,
+            AfterDownload = after,
+            ResetSeconds = seconds,
+        };
+    }
+
     private static DownloadScope ParseScope(string scope) =>
         string.Equals(scope, nameof(DownloadScope.Playlist), StringComparison.OrdinalIgnoreCase)
             ? DownloadScope.Playlist
@@ -353,7 +548,9 @@ public partial class MainWindow
 
         _formatManuallyChanged = true;
         var format = GetSelectedFormat();
-        var quality = DownloadFormats.IsVideo(format) ? App.Settings.VideoQuality : App.Settings.AudioQuality;
+        var quality = DownloadFormats.IsVideo(format)
+            ? QualityPresets.DefaultVideoQuality(App.Settings)
+            : App.Settings.AudioQuality;
         QualityPresets.ApplyToCombo(QualityCombo, format, quality);
         PersistCurrentChoices();
         RefreshFolderDisplay();
@@ -435,7 +632,7 @@ public partial class MainWindow
         if (!string.IsNullOrWhiteSpace(_customCoverArtPath) && File.Exists(_customCoverArtPath))
             CoverArtStatusText.Text = "Cover: custom (all tracks)";
         else
-            CoverArtStatusText.Text = "Cover: video default";
+            CoverArtStatusText.Text = "Cover: thumbnail default";
 
         if (!IsProcessing)
             _ = RefreshUrlCoverPreviewAsync();
@@ -638,6 +835,7 @@ public partial class MainWindow
         RefreshLogPanelVisibility();
         SyncShowTipsCheckbox();
         ApplyMainScreenHintsVisibility();
+        _idleMonitor.ApplySettings();
     }
 
     private void SyncShowTipsCheckbox()
@@ -811,6 +1009,102 @@ public partial class MainWindow
 
         _coverBoundUrlIdentity = identity;
         ClearCustomCoverArtSelection();
+        ClearPendingSongDetails();
+    }
+
+    private void ClearPendingSongDetails()
+    {
+        _pendingSongDetails = null;
+        _pendingSongDetailsUrl = null;
+    }
+
+    private void ApplyPendingSongDetails(SongDetailsResult details)
+    {
+        _pendingSongDetails = details;
+        _pendingSongDetailsUrl = details.Url;
+        _updatingPreviewBox = true;
+        FilenamePreviewBox.Text = details.FileNameWithoutExtension;
+        _updatingPreviewBox = false;
+        _predictedFileName = details.FileNameWithoutExtension;
+        StatusText.Text = "Song details updated — download when ready.";
+    }
+
+    private bool TryGetPendingSongDetails(string url, out SongDetailsResult? details)
+    {
+        details = null;
+        if (_pendingSongDetails is null || _pendingSongDetailsUrl is null)
+            return false;
+        if (!string.Equals(_pendingSongDetailsUrl, url, StringComparison.OrdinalIgnoreCase))
+            return false;
+        details = _pendingSongDetails;
+        return true;
+    }
+
+    private static bool ShouldReviewSongDetails(ContentKind namingKind, DownloadFormat format) =>
+        namingKind == ContentKind.Music || DownloadFormats.IsAudio(format);
+
+    private static ContentKind ResolveSongNamingKind(ContentKind chosen, string url, DownloadFormat format)
+    {
+        var namingKind = ContentKindDetector.Resolve(chosen, url);
+        if (namingKind != ContentKind.Music && DownloadFormats.IsAudio(format))
+            return ContentKind.Music;
+        return namingKind;
+    }
+
+    private async Task<SongDetailsResult?> DetectSongDetailsAsync(
+        string url,
+        DownloadFormat format,
+        ContentKind namingKind)
+    {
+        var metadata = await YtDlpMetadataService.GetTrackMetadataAsync(
+            url, DownloadScope.SingleVideo, format, namingKind).ConfigureAwait(true);
+
+        if (metadata is not null)
+            return SongDetailsResult.FromMetadata(url, metadata);
+
+        return new SongDetailsResult
+        {
+            Url = url,
+            Title = "",
+            Artist = "",
+            AlbumArtist = "",
+            Album = "",
+            FileName = "download",
+        };
+    }
+
+    private async Task<SongDetailsResult?> ShowSongDetailsDialogAsync(
+        string url,
+        DownloadFormat format,
+        ContentKind namingKind,
+        SongDetailsResult? existing = null)
+    {
+        var details = existing ?? await DetectSongDetailsAsync(url, format, namingKind).ConfigureAwait(true);
+        if (existing is null && details is not null &&
+            string.IsNullOrWhiteSpace(details.Title) && string.IsNullOrWhiteSpace(details.Artist))
+        {
+            MessageBox.Show(this,
+                "Could not read song details from YouTube. You can still fill them in manually.",
+                "Edit song details",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
+        if (details is null)
+            return null;
+
+        var dialog = new SongDetailsReviewWindow(details, format, namingKind) { Owner = this };
+        if (dialog.ShowDialog() != true)
+            return null;
+
+        if (dialog.ApplyOnly)
+        {
+            ApplyPendingSongDetails(dialog.Result);
+            return null;
+        }
+
+        ApplyPendingSongDetails(dialog.Result);
+        return dialog.Result;
     }
 
     private static string? GetPrimaryUrlIdentity(string text)
@@ -844,7 +1138,7 @@ public partial class MainWindow
         }
 
         if (CoverArtStatusText is not null)
-            CoverArtStatusText.Text = "Cover: video default";
+            CoverArtStatusText.Text = "Cover: thumbnail default";
 
         SetCoverImage(CoverPreviewImage, CoverPreviewPlaceholder, null);
         if (!IsProcessing)
@@ -1245,10 +1539,11 @@ public partial class MainWindow
 
         if (urls.Count != 1 || string.IsNullOrWhiteSpace(firstUrl))
         {
-            DownloadVideoButton.Content = "This video only";
+            DownloadVideoButton.Content = urls.Count > 1 ? "Download each URL" : "This video only";
             DownloadPlaylistButton.Content = "Whole playlist";
-            DownloadVideoButton.Visibility = Visibility.Visible;
-            DownloadPlaylistButton.Visibility = urls.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            DownloadVideoButton.Visibility = urls.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            DownloadPlaylistButton.Visibility = Visibility.Collapsed;
+            EditSongDetailsButton.Visibility = Visibility.Collapsed;
             ReviewAlbumButton.Visibility = Visibility.Collapsed;
             ApplyDownloadButtonTooltips(isMusic: false);
             return;
@@ -1257,6 +1552,9 @@ public partial class MainWindow
         var ctx = PlaylistKindResolver.GetDownloadContext(firstUrl, chosen);
         var resolved = ContentKindDetector.Resolve(chosen, firstUrl);
         var isMusic = resolved == ContentKind.Music;
+        var isAudioFormat = DownloadFormats.IsAudio(GetSelectedFormat());
+        // Show when we know it's a song (music content) or the user chose an audio format.
+        var showEditSong = isMusic || isAudioFormat;
 
         DownloadVideoButton.Content = isMusic ? "This song only" : "This video only";
         DownloadPlaylistButton.Content = isMusic ? "Whole album" : "Whole playlist";
@@ -1267,17 +1565,20 @@ public partial class MainWindow
             case UrlDownloadContext.SingleTrack:
                 DownloadVideoButton.Visibility = Visibility.Visible;
                 DownloadPlaylistButton.Visibility = Visibility.Collapsed;
+                EditSongDetailsButton.Visibility = showEditSong ? Visibility.Visible : Visibility.Collapsed;
                 ReviewAlbumButton.Visibility = Visibility.Collapsed;
                 break;
             case UrlDownloadContext.MusicAlbum:
                 DownloadVideoButton.Visibility = Visibility.Visible;
                 DownloadPlaylistButton.Visibility = Visibility.Visible;
+                EditSongDetailsButton.Visibility = showEditSong ? Visibility.Visible : Visibility.Collapsed;
                 ReviewAlbumButton.Visibility = Visibility.Visible;
                 break;
             case UrlDownloadContext.VideoPlaylist:
             case UrlDownloadContext.AmbiguousPlaylist:
                 DownloadVideoButton.Visibility = Visibility.Visible;
                 DownloadPlaylistButton.Visibility = Visibility.Visible;
+                EditSongDetailsButton.Visibility = showEditSong ? Visibility.Visible : Visibility.Collapsed;
                 ReviewAlbumButton.Visibility = Visibility.Collapsed;
                 break;
         }
@@ -1390,7 +1691,8 @@ public partial class MainWindow
             DashboardUi.ApplyTheme(this, App.Settings.UseDarkTheme);
             SelectFormat(App.Settings.PreferredFormat);
             RefreshCoverArtStatus();
-            if (App.Settings.MinimizeToTray || App.Settings.StartWithWindows)
+            if (App.Settings.MinimizeToTray || App.Settings.StartWithWindows ||
+                App.Settings.BackgroundRunMode == BackgroundRunMode.IdleTimeout)
                 _tray.ShowTrayIcon();
             else
                 _tray.HideTrayIcon();
@@ -1399,6 +1701,7 @@ public partial class MainWindow
             OnAutoStartChanged();
             SchedulePreviewRefresh();
             _extensionHost.ApplySettings(App.Settings);
+            _idleMonitor.ApplySettings();
             _ = ProcessNextJobAsync();
         }
     }
@@ -1529,6 +1832,102 @@ public partial class MainWindow
     private async void ReviewAlbum_OnClick(object sender, RoutedEventArgs e) =>
         await ReviewAlbumAndEnqueueAsync();
 
+    private async void EditSongDetails_OnClick(object sender, RoutedEventArgs e) =>
+        await EditSongDetailsAndEnqueueAsync();
+
+    private async Task EditSongDetailsAndEnqueueAsync(bool forceRedownload = false)
+    {
+        var urls = UrlBatchParser.Parse(UrlBox.Text);
+        if (urls.Count == 0)
+        {
+            MessageBox.Show(this, "Paste a YouTube URL first.", "Edit song details", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (urls.Count > 1)
+        {
+            MessageBox.Show(this, "Edit song details works with one URL at a time.", "Edit song details", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var tools = ToolDependencyService.Check();
+        if (!tools.AllFound)
+        {
+            MessageBox.Show(this, ToolDependencyService.InstallHint, "Missing tools", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        PersistCurrentChoices();
+        if (!await EnsureCoverArtChoiceAsync().ConfigureAwait(true))
+            return;
+
+        var url = urls[0];
+        var format = GetSelectedFormat();
+        var chosen = GetSelectedContentKind();
+        var namingKind = ResolveSongNamingKind(chosen, url, format);
+        if (!ShouldReviewSongDetails(namingKind, format))
+        {
+            MessageBox.Show(this,
+                "Edit song details is for music / audio downloads. Choose an audio format or set content type to Music.",
+                "Edit song details",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var previousStatus = StatusText.Text;
+        StatusText.Text = "Detecting song details…";
+        SongDetailsResult? edited;
+        try
+        {
+            edited = await ShowSongDetailsDialogAsync(url, format, namingKind).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Edit song details", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText.Text = previousStatus;
+            return;
+        }
+        finally
+        {
+            if (StatusText.Text.StartsWith("Detecting", StringComparison.Ordinal))
+                StatusText.Text = previousStatus;
+        }
+
+        if (edited is null)
+            return;
+
+        var overrideMeta = edited.BuildMetadataOverride();
+        var outputFolder = ContentPathResolver.ResolveOutputFolder(App.Settings, GetSelectedContentKind(), format);
+
+        var job = new DownloadJob
+        {
+            Url = url,
+            Scope = DownloadScope.SingleVideo,
+            Format = format,
+            Quality = GetSelectedQuality(),
+            EmbedThumbnail = EmbedThumbnailBox.IsChecked == true,
+            ContentKind = namingKind,
+            OutputFolder = outputFolder,
+            CustomFileName = edited.FileNameWithoutExtension,
+            PredictedTitle = edited.Title,
+            ForceRedownload = forceRedownload,
+            CustomCoverArtPath = ResolveCoverArtPathForJob(),
+            MetadataOverride = overrideMeta.HasAny ? overrideMeta : null,
+        };
+
+        var decision = await ConfirmIfDuplicateAsync(job, forceRedownload);
+        if (decision is DuplicateDecision.Skip or DuplicateDecision.Cancel)
+        {
+            if (decision == DuplicateDecision.Skip)
+                StatusText.Text = "Skipped — already downloaded.";
+            return;
+        }
+
+        HideDoneState();
+        await AcceptJobsAsync([job]).ConfigureAwait(true);
+    }
+
     private async Task ReviewAlbumAndEnqueueAsync(bool forceRedownload = false)
     {
         var urls = UrlBatchParser.Parse(UrlBox.Text);
@@ -1637,6 +2036,19 @@ public partial class MainWindow
             var chosen = GetSelectedContentKind();
             var namingKind = ContentKindDetector.Resolve(chosen, url);
 
+            if (scope == DownloadScope.SingleVideo &&
+                urls.Count == 1 &&
+                ShouldReviewSongDetails(namingKind, format) &&
+                App.Settings.ReviewSongDetailsBeforeDownload &&
+                !TryGetPendingSongDetails(url, out _))
+            {
+                var songNamingKind = ResolveSongNamingKind(chosen, url, format);
+                var reviewed = await ShowSongDetailsDialogAsync(url, format, songNamingKind).ConfigureAwait(true);
+                if (reviewed is null)
+                    continue;
+                namingKind = songNamingKind;
+            }
+
             if (scope == DownloadScope.Playlist &&
                 namingKind == ContentKind.Music &&
                 App.Settings.ReviewAlbumTracksBeforeDownload)
@@ -1688,10 +2100,11 @@ public partial class MainWindow
 
         if (jobs.Count == 0)
         {
-            if (skipped > 0)
-                StatusText.Text = skipped == 1
+            StatusText.Text = skipped > 0
+                ? skipped == 1
                     ? "Skipped — already downloaded."
-                    : $"Skipped {skipped} already-downloaded URL(s).";
+                    : $"Skipped {skipped} already-downloaded URL(s)."
+                : "Nothing to download — check URLs or try a different scope.";
             return;
         }
 
@@ -1764,37 +2177,37 @@ public partial class MainWindow
     private async Task EnqueueFromExtensionAsync(ExtensionDownloadRequest request)
     {
         if (!IsLikelyYouTubeUrl(request.Url))
+        {
+            _tray.NotifyExtensionDownloadFailed("Not a YouTube URL.");
+            AppendLog($"Extension download ignored — not a YouTube URL: {request.Url}");
             return;
+        }
 
         var tools = ToolDependencyService.Check();
         if (!tools.AllFound)
         {
             StatusText.Text = "Extension download skipped — install yt-dlp and ffmpeg first.";
+            _tray.NotifyExtensionDownloadFailed("yt-dlp or ffmpeg is missing.");
             return;
         }
 
         var format = request.Format ?? DownloadFormats.FromTag(App.Settings.PreferredFormat);
         var quality = request.Quality ?? (DownloadFormats.IsVideo(format)
-            ? App.Settings.VideoQuality
+            ? QualityPresets.DefaultVideoQuality(App.Settings)
             : App.Settings.AudioQuality);
+
+        AppendLog($"Extension request: {DownloadFormats.ToDisplayLabel(format)} / {request.Scope} — {request.Url}");
 
         UrlBox.Text = request.Url;
         SelectFormat(DownloadFormats.ToTag(format));
-        ApplySmartFormatDefaults();
         UpdateDownloadActionsUi();
 
         var contentKind = request.ContentKind;
-        if (request.Scope == DownloadScope.Playlist && (contentKind ?? ContentKind.Auto) == ContentKind.Auto)
+        if (contentKind is null or ContentKind.Auto)
         {
-            _tray.ShowMainWindow();
-            var resolved = await EnsurePlaylistKindResolvedAsync(request.Url, ContentKind.Auto).ConfigureAwait(true);
-            if (resolved is null)
-            {
-                StatusText.Text = "Extension download cancelled — playlist type not chosen.";
-                return;
-            }
-
-            contentKind = resolved;
+            contentKind = DownloadFormats.IsVideo(format)
+                ? ContentKind.Video
+                : ContentKindDetector.Resolve(ContentKind.Auto, request.Url);
         }
 
         var effectiveRequest = new ExtensionDownloadRequest
@@ -1810,22 +2223,25 @@ public partial class MainWindow
         var job = await BuildJobFromExtensionAsync(effectiveRequest, format, quality, request.ForceRedownload)
             .ConfigureAwait(true);
         HideDoneState();
-        _tray.ShowMainWindow();
 
         var decision = await ConfirmIfDuplicateAsync(job, request.ForceRedownload, silentSkip: true);
         if (decision != DuplicateDecision.Proceed)
         {
-            StatusText.Text = decision == DuplicateDecision.Skip
-                ? "Extension download skipped — already downloaded."
-                : "Extension download skipped — already in queue.";
+            var skipReason = decision == DuplicateDecision.Skip
+                ? "Already downloaded — skipped."
+                : "Already in queue — skipped.";
+            StatusText.Text = $"Extension download skipped — {skipReason}";
+            _tray.NotifyExtensionDownloadSkipped(skipReason);
             return;
         }
 
         await AcceptJobsAsync([job]).ConfigureAwait(true);
+        _tray.NotifyExtensionDownloadQueued(job.PredictedTitle ?? job.Url);
     }
 
     private async Task AcceptJobsAsync(IReadOnlyList<DownloadJob> jobs, int skipped = 0)
     {
+        NoteAppActivity();
         var maxParallel = Math.Clamp(App.Settings.MaxParallelDownloads, 1, 5);
         var freeSlots = Math.Max(0, maxParallel - _activeDownloads.Count);
         var shouldQueue = AddToQueueBox.IsChecked == true || freeSlots <= 0 || _queuePaused;
@@ -1925,6 +2341,9 @@ public partial class MainWindow
 
         if (warning.Kind == DuplicateKind.InQueue)
         {
+            if (silentSkip || !IsVisible)
+                return Task.FromResult(DuplicateDecision.Cancel);
+
             if (forceRedownload)
             {
                 var forceQueue = MessageBox.Show(this,
@@ -1936,9 +2355,6 @@ public partial class MainWindow
                     ? DuplicateDecision.Proceed
                     : DuplicateDecision.Cancel);
             }
-
-            if (silentSkip)
-                return Task.FromResult(DuplicateDecision.Cancel);
 
             var queueResult = MessageBox.Show(this,
                 warning.Message + "\n\nDownload anyway?",
@@ -1958,6 +2374,10 @@ public partial class MainWindow
             AppendLog($"Skipped duplicate: {warning.Message.Replace('\n', ' ')}");
             return Task.FromResult(DuplicateDecision.Skip);
         }
+
+        // Extension / background: never block on a hidden MessageBox — honor the explicit click.
+        if (silentSkip || !IsVisible)
+            return Task.FromResult(DuplicateDecision.Proceed);
 
         var result = MessageBox.Show(this,
             warning.Message + "\n\nDownload anyway?",
@@ -2088,6 +2508,15 @@ public partial class MainWindow
             : customName ?? _predictedFileName ?? url;
 
         TrackMetadataOverride? metadataOverride = null;
+        if (scope == DownloadScope.SingleVideo && TryGetPendingSongDetails(url, out var songDetails) && songDetails is not null)
+        {
+            customName = songDetails.FileNameWithoutExtension;
+            predicted = songDetails.Title;
+            var songOverride = songDetails.BuildMetadataOverride();
+            if (songOverride.HasAny)
+                metadataOverride = songOverride;
+        }
+
         if (musicPlaylistInfo is not null)
         {
             metadataOverride = TrackMetadataOverride.ForMusicAlbum(
@@ -2167,6 +2596,7 @@ public partial class MainWindow
 
     private async Task RunJobAsync(DownloadJob job)
     {
+        NoteAppActivity();
         var downloader = new YtDlpDownloadService();
         var cts = new CancellationTokenSource();
         var runtime = new QueueRuntimeState();
@@ -2199,7 +2629,7 @@ public partial class MainWindow
         if (context.IsPrimary)
             ScheduleDownloadCoverRefresh(job, _queueRuntime.CurrentVideoUrl);
 
-        var scopeLabel = job.Scope == DownloadScope.Playlist ? "playlist" : "single video";
+        var scopeLabel = DownloadScopeLabels.ForLog(job.Scope, job.Format);
         var formatLabel = DownloadFormats.ToDisplayLabel(job.Format);
         var kindLabel = ContentKindDetector.DisplayLabel(job.ContentKind);
 
@@ -2219,7 +2649,16 @@ public partial class MainWindow
             _logService.BeginSession($"{formatLabel} / {kindLabel} / {scopeLabel} — {job.Url}");
             AppendLog($"Saving logs to: {_logService.CurrentLogPath}");
             AppendLog($"Output folder: {job.OutputFolder}");
-            if (YouTubeUrlHelper.IsMusicAlbumOrPlaylist(job.Url) && !ToolDependencyService.Check().DenoFound)
+            AppendLog($"Quality: {QualityPresets.GetLabel(job.Format, job.Quality)}");
+            AppendLog($"Concurrent fragments: {App.Settings.ConcurrentFragments}");
+            if (job.ForceRedownload)
+                AppendLog("Force re-download: on");
+            if (job.MetadataOverride?.HasAny == true)
+                AppendLog("Custom metadata: applied");
+            var tools = ToolDependencyService.Check();
+            foreach (var line in ToolDependencyService.DescribeToolsStatus(tools).Split(Environment.NewLine))
+                AppendLog(line);
+            if (YouTubeUrlHelper.IsMusicAlbumOrPlaylist(job.Url) && !tools.DenoFound)
                 AppendLog("WARNING: YouTube Music album — install Deno (winget install DenoLand.Deno -e) and restart the app.");
             _sessionLogStarted = true;
         }
@@ -2465,7 +2904,9 @@ public partial class MainWindow
         DownloadFormats.SelectInCombo(FormatCombo, preferred);
 
         var format = DownloadFormats.FromTag(preferred);
-        var quality = DownloadFormats.IsVideo(format) ? App.Settings.VideoQuality : App.Settings.AudioQuality;
+        var quality = DownloadFormats.IsVideo(format)
+            ? QualityPresets.DefaultVideoQuality(App.Settings)
+            : App.Settings.AudioQuality;
         QualityPresets.ApplyToCombo(QualityCombo, format, quality);
     }
 
@@ -2557,7 +2998,6 @@ public partial class MainWindow
 
             var formatLabel = DownloadFormats.ToDisplayLabel(e.Format);
             var kindLabel = ContentKindDetector.DisplayLabel(e.ContentKind);
-            var scopeLabel = e.Scope == DownloadScope.Playlist ? "Playlist" : "Video";
 
             if (e.Success)
             {
@@ -2579,17 +3019,32 @@ public partial class MainWindow
                         if (!string.IsNullOrWhiteSpace(albumFolder) && Directory.Exists(albumFolder))
                             ShowAlbumDoneState(albumFolder, _sessionCompletedCount, e.ContentKind);
                         else
-                            ShowDoneState(e, kindLabel, formatLabel, scopeLabel);
+                            ShowDoneState(e, kindLabel, formatLabel);
                     }
                     else
                     {
-                        ShowDoneState(e, kindLabel, formatLabel, scopeLabel, context.Job);
+                        ShowDoneState(e, kindLabel, formatLabel, context.Job);
                     }
                 }
                 AppendLog("Done!");
                 if (!string.IsNullOrWhiteSpace(e.ErrorMessage))
                     AppendLog(e.ErrorMessage);
                 RecordHistory(e, context.Job);
+                if (e.ContentKind == ContentKind.Music && e.Success)
+                {
+                    if (albumCompleting)
+                    {
+                        var albumFolder = DownloadJobPathHelper.ResolveAlbumFolder(context.Job)
+                                          ?? Path.GetDirectoryName(e.OutputPath);
+                        if (!string.IsNullOrWhiteSpace(albumFolder) && Directory.Exists(albumFolder))
+                            _ = LocalMusicHubPushIngest.TryNotifyMusicCompletedAsync(albumFolder, context.Job.Url, importFolder: true);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(e.OutputPath))
+                    {
+                        _ = LocalMusicHubPushIngest.TryNotifyMusicCompletedAsync(e.OutputPath, context.Job.Url);
+                    }
+                }
+
                 if (App.Settings.SkipAlreadyDownloaded && e.Scope == DownloadScope.SingleVideo)
                     AppendToDownloadArchive(context.Job.Url);
             }
@@ -2597,7 +3052,7 @@ public partial class MainWindow
             {
                 if (wasPrimary || _activeDownloads.Count == 0)
                     HideDoneState();
-                StatusText.Text = e.ErrorMessage ?? "Download failed.";
+                StatusText.Text = DownloadScopeLabels.StatusFromError(e.ErrorMessage);
                 if (!string.IsNullOrWhiteSpace(e.ErrorMessage))
                     AppendLog(e.ErrorMessage);
             }
@@ -2754,14 +3209,11 @@ public partial class MainWindow
         DownloadCompletedEventArgs e,
         string kindLabel,
         string formatLabel,
-        string scopeLabel,
         DownloadJob? job = null)
     {
         _lastImportIsAlbum = false;
         StatusText.Text = "Done!";
-        var scopeText = job?.MusicAlbumFolder is not null && !string.IsNullOrWhiteSpace(job.MusicAlbumFolder)
-            ? "album track"
-            : scopeLabel.ToLower(CultureInfo.InvariantCulture);
+        var scopeText = DownloadScopeLabels.ForDonePanel(job, e.Scope, e.Format, e.ContentKind);
         DonePathText.Text = $"Saved {kindLabel} {formatLabel} ({scopeText}) to:\n{e.OutputPath}";
         DonePathText.Visibility = Visibility.Visible;
         DoneActions.Visibility = Visibility.Visible;
@@ -2838,12 +3290,8 @@ public partial class MainWindow
         var tools = ToolDependencyService.Check();
         if (tools.AllFound)
         {
-            AppendLog($"yt-dlp: {tools.YtDlpPath}");
-            AppendLog($"ffmpeg: {tools.FfmpegPath}");
-            if (tools.DenoFound)
-                AppendLog($"deno: {tools.DenoPath} (YouTube JS — recommended)");
-            else
-                AppendLog("WARNING: Deno not on PATH — install with: winget install DenoLand.Deno -e");
+            foreach (var line in ToolDependencyService.DescribeToolsStatus(tools).Split(Environment.NewLine))
+                AppendLog(line);
             AppendLog($"Logs folder: {AppPaths.LogsDirectory}");
             AppendLog($"History: {AppPaths.HistoryPath}");
             StatusText.Text = "Ready.";

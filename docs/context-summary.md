@@ -1,9 +1,103 @@
 # Context summary
 
+## 2026-09-16 — Playtest: quality stays in the open panel; check after save
+
+- **Playtest:** Screenshot showed `Download 1080p60 ✓` on the watch-page pill plus quality in the menu.
+- **Ask:** Closed button should just say Download; quality only after click; checkmark after an actual download; redesign the open panel for Audio / Video / quality; republish.
+- **Done:** Extension **1.5.2** — pill is Download / Queued / Downloading / Downloaded ✓. Panel Video caption shows 1080p60. ✓ only when saved (or timed-reset while the file still exists).
+- **Ship:** App 2.1.1 republished. Reload unpacked extension 1.5.2.
+
+## 2026-09-16 — YouTube button live status + quality label (no Detecting hang)
+
+- **Ask:** Button must say Queued → Downloading → Downloaded; file-gone restores Download (or timed reset with “downloaded before” mark, Settings). Button should name what Video will save; was stuck on Detecting. 1080p60 log `303+140` then Done! / Conversion failed!.
+- **Status:** `POST /status` + history `File.Exists`. Settings `ExtensionButtonAfterDownload` keepUntilFileGone | resetAfterSeconds.
+- **Quality UI:** MAIN-world `page-bridge.js` (not `yt-dlp -J`). Idle label `Download 1080p60`.
+- **Cover:** Skip second ffmpeg embed on video when mutagen already stamped the MP4 (that was “Conversion failed!”).
+- **Ship:** App still 2.1.1. Extension **1.5.1**. Quit app, reload unpacked extension.
+
+## 2026-09-15 — August playtest passed (tray, Video MP4, quality, no format-400 hang)
+
+- **Quote:** “That works now! Just like I want it, from my short testing. All the issues I gave you are fixed.”
+- **Passed:** Tray-only extension wake (no white window); Video is video not `.m4a`; per-video quality defaulting to screen height; 1440p of `TdHULsdse1g` downloads after dropping `--check-formats`.
+- **Obsidian:** `Projects/YouTube Downloader/2026-09-15 playtest — tray video quality.md` plus lessons + Atlas.
+
+## 2026-09-15 — Playtest: Video stuck on Testing format 400
+
+- **Playtest:** 1440p MP4 of `TdHULsdse1g` hung on `[info] Testing format 400`.
+- **Cause:** `--check-formats` probes AV1 DASH (format 400) and can stall. Selector also still had audio-only `/` branches from splicing AacAudio.
+- **Fix:** Remove `--check-formats`; `--socket-timeout 20`; video selector prefers `vcodec!*=av01` then AV1; every `/` is video+audio.
+- **Verify (August playtest 2026-09-15):** Passed — “That works now.” Retry after quit downloaded as wanted.
+
+## 2026-09-15 — Playtest: downloads work; tray flash, m4a video, quality picker
+
+- **Playtest:** Downloads queue and run. Remaining: white YouTube Downloader window on extension click; **Video** saved audio-only `.m4a`; wanted per-video quality list, default highest that fits the screen (1080p display should not grab 4K).
+- **Tray:** Protocol `youtubetomp3:` counts as wake. Cold start never paints a visible window (opacity 0, off-screen Show for Loaded, then Hide). Tray Open recenters.
+- **MP4:** Selector is video+audio only (no `/best`). `--check-formats` + remux mp4.
+- **Quality:** Settings default VideoQuality `-1` + MatchVideoToScreen. Extension v1.5.0 lists heights from `POST /formats`; default = min(best, screen).
+- **Ship:** App still 2.1.1. Quit desktop app, run new build, reload unpacked extension 1.5.0.
+
+## 2026-09-15 — Tray restore black flash + extension Video no download
+
+- **Tray:** First "Open downloader" showed a black window then vanished. Window was Hidden while Minimized; tray clicks ran off the WPF UI thread; cancelled Close immediately re-hid on first Show. Fix: no StartupUri (second instance never creates a window); restore on Dispatcher; never leave WindowState.Minimized; defer Hide after cancel-close.
+- **Video button:** Hidden duplicate MessageBox could swallow the click; ApplySmartFormatDefaults was mutating UI after an explicit MP4 request. Extension now retries `/download`; silent duplicate path never shows a dialog.
+
+## 2026-09-15 — Extension wake: tray-only + download race fix
+
+- **Symptom:** YouTube button opened app on screen; download did not start.
+- **Fix:** No `ShowMainWindow` on extension downloads; API host starts in constructor; skip HTTP listener restart on extension-wake + unchanged config; tray balloon on queue/skip/fail; extension v1.4.8 (700ms post-wake delay, /check race tolerant).
+
+## 2026-09-15 — Final polish pass (v2.1.1)
+
+- **Scope labels:** `DownloadScopeLabels` — unified single track/video, album/playlist across done panel, queue, logs (fixed MP3 showing "video").
+- **UX:** Multi-URL batch → "Download each URL" (no misleading Whole playlist); empty enqueue shows message; status bar truncates long errors; Review album hidden until detected; cover/filename hints neutral.
+- **Extension:** Video quality default Best (0) in More options; options.html points to Local API settings; duplicate-check copy neutral.
+- **Docs/build:** README/RELEASE_BODY 2.1.1; browser-extension.md 1.4.7; publish fails if tools missing; Settings About lists extension + bundled tools.
+
+## 2026-09-15 — Download diagnostic logging (DIAG:)
+
+- **Ask:** More logging to diagnose download failures.
+- **Added:** `DownloadDiagnostics.cs` — preflight (app/yt-dlp/Deno, player_client, format selector, output template), full yt-dlp command, run summary (exit code, selected formats, SABR/PO-token/403 warnings, suggested actions). Lines prefixed `DIAG:` in log file and UI. Session start logs quality, concurrent fragments, metadata override.
+
+## 2026-09-15 — YouTube 403 fix (SABR / android_sdkless) + UI coherence
+
+- **Symptom:** MP4 download of `TdHULsdse1g` failed 403; log showed SABR warning, format 140 only; error hint told user to install Deno (already installed).
+- **Root cause:** Forced `android,android_vr,tv` clients + stale bundled yt-dlp 2026.07.04; SABR experiment blocked HTTPS formats.
+- **Fix:** `YouTubeExtractorArgs` → `default,-android_sdkless,-tv_simply,-mweb`; `fetch-bundled-tools.ps1` always refreshes yt-dlp (now 2026.08.19); contextual 403 hints; Settings About shows bundled tool versions; path labels fixed (audio/video not MP3/MP4 only); log shows tool status per session.
+- **Verified:** MP4 + MP3 download of same video succeeds with new build.
+
+## 2026-09-15 — Full local install (v2.1.1)
+
+- **Ask:** Full rebuild/install — app, bundled tools, extension, installer, shortcuts.
+- **Done:** `scripts\build-installer.ps1` — publish win-x64 with yt-dlp/ffmpeg/tools, extension v1.4.7, sync to `%LocalAppData%\Programs\YouTubeToMp3\`, installer `installer\Output\YouTubeToMp3-Setup-2.1.1.exe` (152.6 MB).
+- **Includes:** Wake-on-click, idle auto-quit, YouTube client fix (-tv_simply/-mweb), song details editor, all prior QoL.
+
+## 2026-09-15 — Wake on extension click + idle auto-quit
+
+- **Source:** Obsidian `Projects/YouTube Downloader/wake-on-click-idle-timeout.md`.
+- **Settings → Local API:** Background presence — **Always on** (default) or **Auto-quit when idle** with configurable minutes (default 15). Idle mode minimizes to tray on close; quits after no downloads, queue work, or extension API use.
+- **Wake:** Registers `youtubetomp3://` protocol (`AppWakeProtocolService`); extension **1.4.7** wakes via synchronous anchor click on user gesture (service-worker `tabs.create` was blocked); sync script registers protocol to installed exe.
+- **Files:** `BackgroundRunMode.cs`, `AppIdleMonitor.cs`, `AppWakeProtocolService.cs`, `MainWindow.xaml.cs`, `SettingsWindow`, `browser-extension/*`, installer registry.
+
+## 2026-07-19 — Edit song details (single track)
+
+- **Ask:** When downloading audio/a song, allow correcting title/artist/album before download (YouTube tags are often wrong).
+- **Added:** **Edit song details…** button on main Actions (shown for music content or audio format, single URL). Opens dialog prefilled from yt-dlp metadata; user edits Title / Artist / Album artist / Album / Filename, then **Download song**.
+- **Behavior:** Embeds `TrackMetadataOverride` tags; sets `CustomFileName`. Heuristic splits `"Artist - Title"` when artist field is blank. Album review unchanged.
+- **Fix:** Form fields wrapped in `ScrollViewer` so the dialog scrolls when the window is short.
+- **Continued:** **Apply** saves edits to main window (filename preview + pending tags) without downloading; **Re-detect** refetches from YouTube; **This song only** uses applied edits; Settings → **Review song details before single-track music downloads** (optional auto-prompt).
+- **Synced:** Release build → `%LocalAppData%\Programs\YouTubeToMp3\`; Start Menu + Desktop shortcuts refreshed (v2.1.0).
+- **Files:** `SongDetailsResult.cs`, `SongDetailsReviewWindow.xaml(.cs)`, `MainWindow.xaml(.cs)`, `AppSettingsService.cs`, `SettingsWindow.xaml(.cs)`.
+
 ## Agent environment
 
 - **`move_agent_to_root` does not work** here — never call it. Use absolute paths under `GitHub projects\` for YouTube Downloader or Local Music Hub.
 - **Release builds** auto-sync to `%LocalAppData%\Programs\YouTubeToMp3\` and refresh Start Menu / Desktop shortcuts (`scripts\update-windows-shortcuts.ps1`).
+
+## 2026-07-19 — Maple Bear platform checklist + master prompt
+
+- Cross-app platform docs created from Hub + YouTube Downloader + What Am I Doing patterns.
+- Shared files: `GitHub projects/docs/maple-bear-app-platform-checklist.md`, `GitHub projects/docs/maple-bear-app-platform-master-prompt.md`.
+- Downloader contributed: DashboardTheme light/dark, activate.signal single-instance, local HTTP API / extension host, Hub file IPC, tips toggle.
 
 ## 2026-07-14 — Main screen tips + local rebuild (v1.9.9)
 
@@ -430,3 +524,14 @@
 - **Root cause:** yt-dlp metadata step writes `*.temp.flac` then renames to `.flac` in the music library folder. Local Music Hub’s folder watcher can open the file during that window, causing `[WinError 5] Access is denied`.
 - **Fix (YouTube Downloader):** Downloads now stage under `%LocalAppData%\YouTubeToMp3\staging\{session}\` via `DownloadStagingService`; finished files move to the library only after yt-dlp + optional cover embed complete. Added `--force-overwrites` and clearer WinError 5 messaging.
 - **Fix (Local Music Hub, local):** `YouTubeDownloaderBridge` and `LibraryFolderWatcher` ignore `*.temp.*`, `*.part`, and `*.ytdl` artifacts.
+
+## 2026-07-15 — Publish v2.1.0
+
+- Tagged `v2.1.0` and pushed to `Litbolt123/YouTube-to-MP3` — CI builds `YouTubeToMp3-Setup-2.1.0.exe` GitHub Release.
+- Includes: download staging, AAC-first audio, FLAC cover embed fixes, playlist partial-success cover embed, grouped download history.
+
+## 2026-07-19 — Platform-pattern inventory (reusable Maple Bear features)
+
+- Explored YouTube Downloader for cross-app platform patterns (not download-domain logic).
+- Documented: single-instance mutex + activate.signal, DashboardTheme light/dark, tray + HKCU Start-with-Windows, JSON settings under LocalAppData, GitHub Releases updater, Inno Setup + GH Actions release, download logs (no global crash handler), About in Settings, Ctrl+V paste shortcut, tray balloons / SystemSounds, PerMonitorV2 DPI, app.ico branding, Dash* UI chrome, localhost HttpListener API + Music Hub file IPC.
+- Absent: system-theme follow, always-on-top, dedicated first-run wizard, global unhandled-exception handler, MSIX/WinUI/Avalonia.

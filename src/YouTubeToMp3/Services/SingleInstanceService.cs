@@ -7,6 +7,8 @@ public static class SingleInstanceService
     public static string ActivateSignalPath =>
         Path.Combine(AppPaths.DataDirectory, "activate.signal");
 
+    public const string ExtensionWakeSignal = "extension-wake";
+
     public static bool TryBecomePrimaryInstance(out Mutex? mutex)
     {
         mutex = new Mutex(true, MutexName, out var createdNew);
@@ -18,12 +20,14 @@ public static class SingleInstanceService
         return false;
     }
 
-    public static void NotifyPrimaryInstance()
+    public static void NotifyPrimaryInstance(bool extensionWake = false)
     {
         try
         {
             Directory.CreateDirectory(AppPaths.DataDirectory);
-            File.WriteAllText(ActivateSignalPath, DateTime.UtcNow.ToString("o"));
+            File.WriteAllText(
+                ActivateSignalPath,
+                extensionWake ? ExtensionWakeSignal : DateTime.UtcNow.ToString("o"));
         }
         catch
         {

@@ -37,7 +37,7 @@ public sealed class DownloadJob
     public string QueueLabel =>
         $"{ContentKindDetector.Emoji(ContentKind)} {ContentKindDetector.DisplayLabel(ContentKind)} · " +
         $"{DownloadFormats.ToDisplayLabel(Format)} · " +
-        $"{(Scope == DownloadScope.Playlist ? "Playlist" : "Single")} · " +
+        $"{DownloadScopeLabels.For(Scope, Format, ContentKind)} · " +
         (!string.IsNullOrWhiteSpace(CollectionTitle)
             ? TruncateTitle(CollectionTitle)
             : string.IsNullOrWhiteSpace(PredictedTitle) ? TruncateUrl(Url) : TruncateTitle(PredictedTitle));

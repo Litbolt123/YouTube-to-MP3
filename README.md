@@ -4,11 +4,11 @@ Download music and videos from YouTube to your PC — pairs with **Local Music H
 
 **License:** [Apache License 2.0](LICENSE)
 
-**Current version: 1.9.8**
+**Current version: 2.1.1**
 
 ## Install (friends)
 
-1. Download **`YouTubeToMp3-Setup-1.9.8.exe`** from [GitHub Releases](https://github.com/Litbolt123/YouTube-to-MP3/releases).
+1. Download **`YouTubeToMp3-Setup-2.1.1.exe`** from [GitHub Releases](https://github.com/Litbolt123/YouTube-to-MP3/releases).
 2. Run the installer — **yt-dlp and ffmpeg are bundled**; no winget step required.
 3. Optional: `winget install DenoLand.Deno -e` for YouTube Music edge cases in 2026.
 4. Optional: install **Local Music Hub** for a full local library player.

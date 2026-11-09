@@ -1,0 +1,93 @@
+<Window x:Class="YouTubeToMp3.SongDetailsReviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Edit song details"
+        Height="420" Width="520"
+        MinWidth="440" MinHeight="280"
+        Background="{DynamicResource DashBgBrush}"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Style="{DynamicResource DashSectionTitle}" Margin="0,0,0,6"
+                       Text="Edit song details"/>
+            <TextBlock Style="{DynamicResource DashHintText}" TextWrapping="Wrap"
+                       Text="Fix title, artist, and album before download. These tags are embedded in the audio file and used for the filename."/>
+        </StackPanel>
+
+        <Border Grid.Row="1" Style="{DynamicResource DashCardBorder}" Padding="0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          CanContentScroll="False"
+                          Padding="14">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Title" VerticalAlignment="Center" Style="{DynamicResource DashSettingLabel}" Margin="0,0,8,10"/>
+                    <TextBox x:Name="TitleBox" Grid.Row="0" Grid.Column="1" Height="30" Margin="0,0,0,10"
+                             Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
+                             TextChanged="Field_OnTextChanged"/>
+
+                    <TextBlock Grid.Row="1" Text="Artist" VerticalAlignment="Center" Style="{DynamicResource DashSettingLabel}" Margin="0,0,8,10"/>
+                    <TextBox x:Name="ArtistBox" Grid.Row="1" Grid.Column="1" Height="30" Margin="0,0,0,10"
+                             Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
+                             TextChanged="Field_OnTextChanged"/>
+
+                    <TextBlock Grid.Row="2" Text="Album artist" VerticalAlignment="Center" Style="{DynamicResource DashSettingLabel}" Margin="0,0,8,10"/>
+                    <TextBox x:Name="AlbumArtistBox" Grid.Row="2" Grid.Column="1" Height="30" Margin="0,0,0,10"
+                             Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
+                             TextChanged="Field_OnTextChanged"/>
+
+                    <TextBlock Grid.Row="3" Text="Album" VerticalAlignment="Center" Style="{DynamicResource DashSettingLabel}" Margin="0,0,8,10"/>
+                    <TextBox x:Name="AlbumBox" Grid.Row="3" Grid.Column="1" Height="30" Margin="0,0,0,10"
+                             Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
+                             TextChanged="Field_OnTextChanged"/>
+
+                    <TextBlock Grid.Row="4" Text="Filename" VerticalAlignment="Center" Style="{DynamicResource DashSettingLabel}" Margin="0,0,8,10"/>
+                    <TextBox x:Name="FileNameBox" Grid.Row="4" Grid.Column="1" Height="30" Margin="0,0,0,6"
+                             Style="{DynamicResource DashTextBox}" VerticalContentAlignment="Center" Padding="8,0"
+                             TextChanged="FileNameBox_OnTextChanged"/>
+
+                    <TextBlock x:Name="DetectedHintText" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
+                               Style="{DynamicResource DashHintText}" TextWrapping="Wrap" FontSize="11"/>
+                </Grid>
+            </ScrollViewer>
+        </Border>
+
+        <TextBlock x:Name="StatusText" Grid.Row="2" Style="{DynamicResource DashHintText}" Margin="0,10,0,0" TextWrapping="Wrap"/>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="Re-detect" Padding="14,8" Margin="0,0,8,0"
+                    Style="{DynamicResource DashToolbarButton}" Click="Redetect_OnClick"
+                    ToolTip="Fetch song details from YouTube again"/>
+            <Button Content="Reset" Padding="14,8" Margin="0,0,8,0"
+                    Style="{DynamicResource DashToolbarButton}" Click="Reset_OnClick"
+                    ToolTip="Restore detected values"/>
+            <Button Content="Apply" Padding="14,8" Margin="0,0,8,0"
+                    Style="{DynamicResource DashToolbarButton}" Click="Apply_OnClick"
+                    ToolTip="Save edits to the main window without downloading"/>
+            <Button Content="Cancel" Padding="14,8" Margin="0,0,8,0"
+                    Style="{DynamicResource DashToolbarButton}" IsCancel="True"/>
+            <Button Content="Download song" Padding="16,8"
+                    Style="{DynamicResource DashPrimaryButton}" IsDefault="True" Click="Download_OnClick"/>
+        </StackPanel>
+    </Grid>
+</Window>

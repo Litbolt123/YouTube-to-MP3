@@ -17,7 +17,8 @@ const AUDIO_QUALITIES = [
 ];
 
 const VIDEO_QUALITIES = [
-  { value: 0, label: "Best available" },
+  { value: -1, label: "Match this screen" },
+  { value: 0, label: "Best available (highest this video has)" },
   { value: 1, label: "Up to 4K (2160p)" },
   { value: 2, label: "Up to 1440p" },
   { value: 5, label: "Up to 1080p" },
@@ -49,6 +50,7 @@ const BTN_STYLE = [
   "vertical-align:middle",
   "flex:0 0 auto",
   "align-self:center",
+  "gap:6px",
 ].join(";");
 
 const SHADOW_STYLE_ID = "ytmp3-shadow-style";
@@ -664,6 +666,10 @@ function hasVisibleDownloadButton() {
 
 function removeButton() {
   closePanel();
+  stopStatusPoll();
+  clearResetTimer();
+  localPhase = "idle";
+  sawThisVisitDownload = false;
   for (const wrapper of findConnectedWrappers()) {
     clearFloatHandlers(wrapper);
     wrapper._ytmp3PinnedAnchor = null;
@@ -693,7 +699,12 @@ function isVideoFormat(tag) {
   return tag === "mp4";
 }
 
-function fillQualitySelect(select, formatTag) {
+function heightLabel(height) {
+  if (height >= 2160) return `${height}p (4K)`;
+  return `${height}p`;
+}
+
+function fillQualitySelect(select, formatTag, preferred) {
   const options = isVideoFormat(formatTag) ? VIDEO_QUALITIES : AUDIO_QUALITIES;
   select.innerHTML = "";
   for (const option of options) {
@@ -702,7 +713,399 @@ function fillQualitySelect(select, formatTag) {
     el.textContent = option.label;
     select.appendChild(el);
   }
-  select.value = isVideoFormat(formatTag) ? "2" : "0";
+  const fallback = isVideoFormat(formatTag) ? "-1" : "0";
+  select.value = preferred != null && [...select.options].some((o) => o.value === String(preferred))
+    ? String(preferred)
+    : fallback;
+}
+
+function fillLiveVideoQualities(select, probe) {
+  if (!select) return;
+  select.disabled = false;
+  select.innerHTML = "";
+
+  const heights = Array.isArray(probe?.heights) && probe.heights.length
+    ? probe.heights
+    : [2160, 1440, 1080, 720, 480, 360];
+  const labels = probe?.labels || {};
+  const matchScreen = probe?.matchScreen !== false;
+  const suggested = probe?.suggestedHeight ?? probe?.screenHeight ?? heights[0];
+  const best = probe?.bestHeight ?? heights[0];
+
+  const bestOpt = document.createElement("option");
+  bestOpt.value = "0";
+  bestOpt.textContent = best
+    ? `Best available (${labels[best] || heightLabel(best)} — highest this video has)`
+    : "Best available (highest this video has)";
+  select.appendChild(bestOpt);
+
+  for (const height of heights) {
+    const el = document.createElement("option");
+    el.value = String(height);
+    const shown = labels[height] || heightLabel(height);
+    const notes = [];
+    if (height === suggested && matchScreen) notes.push("matches your screen");
+    if (height === best) notes.push("highest");
+    el.textContent = notes.length ? `${shown} (${notes.join(", ")})` : shown;
+    select.appendChild(el);
+  }
+
+  select.value = matchScreen ? String(suggested) : "0";
+  if (![...select.options].some((o) => o.value === select.value)) {
+    select.value = String(heights[0]);
+  }
+  syncPanelCaptions(select.closest(".ytmp3-panel"));
+}
+
+function selectedQualityCaption(select) {
+  const opt = select?.selectedOptions?.[0];
+  const raw = (opt?.textContent || suggestedDownloadLabel || "MP4").replace(/\s*\(.*\)\s*$/, "").trim();
+  return raw || suggestedDownloadLabel || "MP4";
+}
+
+function syncPanelCaptions(root) {
+  const panel = root?.classList?.contains("ytmp3-panel") ? root : document.getElementById(PANEL_ID);
+  if (!panel) return;
+  const select = panel.querySelector(".ytmp3-live-quality");
+  const videoCap = selectedQualityCaption(select);
+  panel.querySelectorAll(".ytmp3-quick-video-cap").forEach((el) => {
+    el.textContent = videoCap;
+  });
+  const status = panel.querySelector(".ytmp3-panel-status");
+  if (status) {
+    if (localPhase === "queued") {
+      status.hidden = false;
+      status.textContent = "Queued in the app";
+    } else if (localPhase === "downloading") {
+      status.hidden = false;
+      status.textContent = "Downloading now";
+    } else if (localPhase === "downloaded") {
+      status.hidden = false;
+      status.textContent = "Already saved ✓";
+    } else {
+      status.hidden = true;
+      status.textContent = "";
+    }
+  }
+}
+
+let cachedScreenHeight = 1080;
+let cachedMatchScreen = true;
+let cachedAfterDownload = "keepUntilFileGone";
+let cachedResetSeconds = 5;
+let suggestedDownloadLabel = "";
+let statusPollTimer = null;
+let statusPollFast = false;
+let resetToDownloadTimer = null;
+let localPhase = "idle";
+let sawThisVisitDownload = false;
+let timedResetDone = false;
+let holdUntilAppSeesJob = 0;
+let pagePlayerResponse = null;
+
+const PAGE_PLAYER_SOURCE = "YOUTUBE_TO_MP3_PLAYER";
+
+window.addEventListener("message", (event) => {
+  if (event.source !== window) return;
+  if (event.data?.source !== PAGE_PLAYER_SOURCE) return;
+  if (event.data.player?.streamingData) {
+    pagePlayerResponse = event.data.player;
+    const probe = probeFromYouTubePage();
+    const open = document.getElementById(PANEL_ID);
+    if (open?.isConnected) {
+      fillLiveVideoQualities(open.querySelector(".ytmp3-live-quality"), probe);
+      syncPanelCaptions(open);
+    }
+    if (localPhase === "idle") {
+      const mark = getDownloadButton()?.querySelector(".ytmp3-btn-mark");
+      const badgeOn = !!(mark && !mark.hidden);
+      setButtonChrome(idleDownloadText(), { badge: badgeOn, title: idleTitle() });
+    }
+  }
+});
+
+function requestPagePlayer() {
+  window.postMessage({ source: PAGE_PLAYER_SOURCE, request: "player" }, "*");
+}
+
+function extractJsonObject(source) {
+  const start = source.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  for (let i = start; i < Math.min(source.length, start + 2_000_000); i++) {
+    const ch = source[i];
+    if (inStr) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(source.slice(start, i + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function parsePlayerResponse() {
+  if (pagePlayerResponse?.streamingData) return pagePlayerResponse;
+  const fromWindow = window.ytInitialPlayerResponse;
+  if (fromWindow?.streamingData) return fromWindow;
+
+  for (const script of document.getElementsByTagName("script")) {
+    const text = script.textContent || "";
+    const idx = text.indexOf("ytInitialPlayerResponse");
+    if (idx < 0) continue;
+    const eq = text.indexOf("=", idx);
+    if (eq < 0) continue;
+    const parsed = extractJsonObject(text.slice(eq + 1));
+    if (parsed?.streamingData) return parsed;
+  }
+  return null;
+}
+
+function probeFromYouTubePage() {
+  const player = parsePlayerResponse();
+  const formats = [
+    ...(player?.streamingData?.adaptiveFormats || []),
+    ...(player?.streamingData?.formats || []),
+  ];
+  const byHeight = new Map();
+  for (const fmt of formats) {
+    const height = Number(fmt.height);
+    if (!Number.isFinite(height) || height < 144) continue;
+    if (fmt.mimeType && /^audio\//i.test(fmt.mimeType)) continue;
+    const fps = Number(fmt.fps) || 0;
+    const label = fmt.qualityLabel || (fps >= 50 ? `${height}p${fps}` : `${height}p`);
+    const prev = byHeight.get(height);
+    if (!prev || fps > prev.fps) byHeight.set(height, { height, fps, label });
+  }
+
+  const heights = [...byHeight.keys()].sort((a, b) => b - a);
+  const labels = {};
+  for (const [height, info] of byHeight) labels[height] = info.label;
+  if (!heights.length) {
+    return {
+      heights: [],
+      labels,
+      bestHeight: null,
+      suggestedHeight: cachedScreenHeight,
+      screenHeight: cachedScreenHeight,
+      matchScreen: cachedMatchScreen,
+    };
+  }
+
+  const suggested = heights.filter((h) => h <= cachedScreenHeight).sort((a, b) => b - a)[0]
+    || heights[heights.length - 1];
+  suggestedDownloadLabel = byHeight.get(suggested)?.label || `${suggested}p`;
+  return {
+    heights,
+    labels,
+    bestHeight: heights[0] || null,
+    suggestedHeight: suggested,
+    screenHeight: cachedScreenHeight,
+    matchScreen: cachedMatchScreen,
+  };
+}
+
+function getDownloadButton() {
+  return queryDeep(`#${BTN_ID}`) || document.getElementById(BTN_ID);
+}
+
+function setButtonChrome(text, { badge = false, title = "", busy = false } = {}) {
+  const btn = getDownloadButton();
+  if (!btn) return;
+  let label = btn.querySelector(".ytmp3-btn-label");
+  if (!label) {
+    btn.textContent = "";
+    label = document.createElement("span");
+    label.className = "ytmp3-btn-label";
+    btn.appendChild(label);
+    const mark = document.createElement("span");
+    mark.className = "ytmp3-btn-mark";
+    mark.hidden = true;
+    mark.textContent = "✓";
+    mark.title = "Saved";
+    btn.appendChild(mark);
+  }
+  label.textContent = text;
+  const markEl = btn.querySelector(".ytmp3-btn-mark");
+  if (markEl) markEl.hidden = !badge;
+  btn.disabled = !!busy;
+  btn.title = title || `Download with ${YTDL_APP_NAME}`;
+}
+
+function idleDownloadText() {
+  return "Download";
+}
+
+function stopStatusPoll() {
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer);
+    statusPollTimer = null;
+  }
+  statusPollFast = false;
+}
+
+function clearResetTimer() {
+  if (resetToDownloadTimer) {
+    clearTimeout(resetToDownloadTimer);
+    resetToDownloadTimer = null;
+  }
+}
+
+function rescheduleStatusPoll(fast) {
+  const want = !!fast;
+  if (statusPollTimer && statusPollFast === want) return;
+  stopStatusPoll();
+  statusPollFast = want;
+  statusPollTimer = setInterval(() => {
+    if (!isWatchPage()) {
+      stopStatusPoll();
+      return;
+    }
+    refreshWatchStatus();
+  }, want ? 900 : 2500);
+}
+
+function idleTitle(data) {
+  if (data?.downloadedBefore && !data.fileExists) return "File was removed — click to download again";
+  if (data?.fileExists || (data?.downloadedBefore && cachedAfterDownload === "resetAfterSeconds")) {
+    return "Saved — click for Audio or Video to download again";
+  }
+  return `Download with ${YTDL_APP_NAME} — click for Audio or Video`;
+}
+
+function applyWatchStatus(data) {
+  if (!data) return;
+  if (data.afterDownload) cachedAfterDownload = data.afterDownload;
+  if (Number.isFinite(Number(data.resetSeconds))) cachedResetSeconds = Number(data.resetSeconds);
+
+  const state = data.state || "idle";
+  const resetTimed = cachedAfterDownload === "resetAfterSeconds";
+
+  if (state === "queued" || state === "downloading") {
+    timedResetDone = false;
+    clearResetTimer();
+  }
+
+  if (state === "downloading") {
+    localPhase = "downloading";
+    const pct = Number.isFinite(Number(data.percent)) ? ` ${Math.round(Number(data.percent))}%` : "";
+    setButtonChrome(`Downloading${pct}`, { title: data.detail || "Downloading…" });
+    rescheduleStatusPoll(true);
+    syncPanelCaptions();
+    return;
+  }
+
+  if (state === "queued") {
+    localPhase = "queued";
+    setButtonChrome("Queued", { title: "Waiting in the YouTube Downloader queue" });
+    rescheduleStatusPoll(true);
+    syncPanelCaptions();
+    return;
+  }
+
+  if (state === "downloaded") {
+    holdUntilAppSeesJob = 0;
+    if (resetTimed && timedResetDone) {
+      localPhase = "idle";
+      setButtonChrome(idleDownloadText(), { badge: true, title: idleTitle(data) });
+      rescheduleStatusPoll(false);
+      syncPanelCaptions();
+      return;
+    }
+    localPhase = "downloaded";
+    setButtonChrome("Downloaded", {
+      badge: true,
+      title: data.path || "Saved to your videos folder",
+    });
+    if (resetTimed && !resetToDownloadTimer) {
+      resetToDownloadTimer = setTimeout(() => {
+        timedResetDone = true;
+        localPhase = "idle";
+        setButtonChrome(idleDownloadText(), { badge: true, title: "Saved — click to download again" });
+        syncPanelCaptions();
+      }, Math.max(1, cachedResetSeconds) * 1000);
+    }
+    rescheduleStatusPoll(false);
+    syncPanelCaptions();
+    return;
+  }
+
+  if (
+    sawThisVisitDownload &&
+    Date.now() < holdUntilAppSeesJob &&
+    (localPhase === "queued" || localPhase === "downloading")
+  ) {
+    return;
+  }
+
+  localPhase = "idle";
+  const badge = !!data.fileExists && resetTimed && !!data.downloadedBefore;
+  setButtonChrome(idleDownloadText(), { badge, title: idleTitle(data) });
+  rescheduleStatusPoll(false);
+  syncPanelCaptions();
+}
+
+async function refreshWatchStatus() {
+  if (!isWatchPage()) return;
+  requestPagePlayer();
+  probeFromYouTubePage();
+
+  const result = await ytdlWatchStatus(location.href);
+  if (result?.ok && result.data) {
+    applyWatchStatus(result.data);
+    return;
+  }
+
+  if (localPhase === "idle") {
+    setButtonChrome(idleDownloadText(), { title: idleTitle() });
+  }
+}
+
+function startStatusPoll(fast) {
+  const want = !!fast;
+  if (!statusPollTimer || statusPollFast !== want) {
+    stopStatusPoll();
+    statusPollFast = want;
+    statusPollTimer = setInterval(() => {
+      if (!isWatchPage()) {
+        stopStatusPoll();
+        return;
+      }
+      refreshWatchStatus();
+    }, want ? 900 : 2500);
+  }
+  refreshWatchStatus();
+}
+
+async function rememberHealthSettings() {
+  const health = await ytdlHealthCheck();
+  if (!health?.ok) return;
+  const data = health.data || {};
+  if (data.video?.screenHeight) cachedScreenHeight = data.video.screenHeight;
+  if (typeof data.video?.matchScreen === "boolean") cachedMatchScreen = data.video.matchScreen;
+  if (data.button?.afterDownload) cachedAfterDownload = data.button.afterDownload;
+  if (Number.isFinite(Number(data.button?.resetSeconds))) cachedResetSeconds = Number(data.button.resetSeconds);
+}
+
+function readLiveQuality(panel) {
+  const select = panel?.querySelector(".ytmp3-live-quality");
+  if (!select || select.disabled) return undefined;
+  const n = Number(select.value);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function closePanel() {
@@ -716,6 +1119,7 @@ function closePanel() {
 
 async function sendToApp({ format, quality, contentKind, scope = "single", forceRedownload = false }) {
   closePanel();
+  ytdlWakeAppSync();
 
   const { token } = await getSettings();
   if (!token) {
@@ -723,11 +1127,8 @@ async function sendToApp({ format, quality, contentKind, scope = "single", force
     return;
   }
 
-  const btn = queryDeep(`#${BTN_ID}`) || document.getElementById(BTN_ID);
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Sending…";
-  }
+  const btn = getDownloadButton();
+  if (btn) setButtonChrome("Sending…", { busy: true, title: "Sending to YouTube Downloader…" });
 
   const isPlaylist = scope === "playlist";
 
@@ -737,11 +1138,13 @@ async function sendToApp({ format, quality, contentKind, scope = "single", force
       const check = await ytdlCheckUrl(location.href);
       const data = check?.data || check;
       if (check?.ok && (data?.alreadyDownloaded || data?.inHistory || data?.inQueue)) {
-        const detail = data.message || "This video was already downloaded or is in the queue.";
+        const detail = data.message || "This link was already downloaded or is in the queue.";
         const again = window.confirm(`${detail}\n\nDownload anyway?`);
         if (!again) {
           showToast("Skipped — already downloaded.");
-          if (btn) btn.textContent = "Download";
+          setButtonChrome("Downloaded", { badge: true, title: "Already saved" });
+          localPhase = "downloaded";
+          startStatusPoll(false);
           return;
         }
         force = true;
@@ -764,7 +1167,9 @@ async function sendToApp({ format, quality, contentKind, scope = "single", force
     const skipped = result?.data?.skipped;
     if (skipped) {
       showToast(result.data.message || "Already downloaded — skipped.");
-      if (btn) btn.textContent = "Exists";
+      setButtonChrome("Downloaded", { badge: true, title: result.data.message || "Already saved" });
+      localPhase = "downloaded";
+      startStatusPoll(false);
     } else {
       showToast(
         force
@@ -775,23 +1180,25 @@ async function sendToApp({ format, quality, contentKind, scope = "single", force
             ? `Playlist sent to ${YTDL_APP_NAME}`
             : `Sent to ${YTDL_APP_NAME}`
       );
-      if (btn) btn.textContent = "Queued";
+      sawThisVisitDownload = true;
+      timedResetDone = false;
+      holdUntilAppSeesJob = Date.now() + 15000;
+      localPhase = "queued";
+      setButtonChrome("Queued", { title: "Waiting in the YouTube Downloader queue" });
+      startStatusPoll(true);
     }
   } catch (error) {
     showToast(error.message || "Could not send to app", true);
-    if (btn) btn.textContent = "Download";
+    setButtonChrome(idleDownloadText());
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      setTimeout(() => {
-        if (btn.textContent === "Queued" || btn.textContent === "Exists") btn.textContent = "Download";
-      }, 2500);
-    }
+    const live = getDownloadButton();
+    if (live) live.disabled = false;
   }
 }
 
 function openPanel(anchorButton) {
   closePanel();
+  requestPagePlayer();
 
   const playlist = hasPlaylistContext();
   const panel = document.createElement("div");
@@ -799,19 +1206,38 @@ function openPanel(anchorButton) {
   panel.className = "ytmp3-panel";
   panel.innerHTML = `
     <div class="ytmp3-panel-title">${YTDL_APP_NAME}</div>
-    <div class="ytmp3-scope-label">This video</div>
-    <div class="ytmp3-quick-row">
-      <button type="button" class="ytmp3-quick ytmp3-quick-audio">Audio</button>
-      <button type="button" class="ytmp3-quick ytmp3-quick-video">Video</button>
+    <div class="ytmp3-panel-status" hidden></div>
+    <p class="ytmp3-panel-lead">Audio saves music. Video saves the quality below.</p>
+    <div class="ytmp3-quick-row ytmp3-quick-row-tall">
+      <button type="button" class="ytmp3-quick ytmp3-quick-audio">
+        <span class="ytmp3-quick-name">Audio</span>
+        <span class="ytmp3-quick-cap ytmp3-quick-audio-cap">MP3</span>
+      </button>
+      <button type="button" class="ytmp3-quick ytmp3-quick-video">
+        <span class="ytmp3-quick-name">Video</span>
+        <span class="ytmp3-quick-cap ytmp3-quick-video-cap">MP4</span>
+      </button>
+    </div>
+    <div class="ytmp3-quality-row">
+      <div class="ytmp3-scope-label">Video quality</div>
+      <select class="ytmp3-select ytmp3-live-quality">
+        <option>Reading this page…</option>
+      </select>
     </div>
     ${
       playlist
         ? `
     <div class="ytmp3-playlist-section">
       <div class="ytmp3-scope-label">Whole playlist</div>
-      <div class="ytmp3-quick-row">
-        <button type="button" class="ytmp3-quick ytmp3-quick-playlist-audio">Audio</button>
-        <button type="button" class="ytmp3-quick ytmp3-quick-playlist-video">Video</button>
+      <div class="ytmp3-quick-row ytmp3-quick-row-tall">
+        <button type="button" class="ytmp3-quick ytmp3-quick-audio ytmp3-quick-playlist-audio">
+          <span class="ytmp3-quick-name">Audio</span>
+          <span class="ytmp3-quick-cap ytmp3-quick-audio-cap">MP3</span>
+        </button>
+        <button type="button" class="ytmp3-quick ytmp3-quick-video ytmp3-quick-playlist-video">
+          <span class="ytmp3-quick-name">Video</span>
+          <span class="ytmp3-quick-cap ytmp3-quick-video-cap">MP4</span>
+        </button>
       </div>
     </div>`
         : ""
@@ -851,6 +1277,7 @@ function openPanel(anchorButton) {
 
   const formatSelect = panel.querySelector(".ytmp3-format");
   const qualitySelect = panel.querySelector(".ytmp3-quality");
+  const liveQualitySelect = panel.querySelector(".ytmp3-live-quality");
   const contentSelect = panel.querySelector(".ytmp3-content");
   const scopeSelect = panel.querySelector(".ytmp3-scope");
   const details = panel.querySelector(".ytmp3-details");
@@ -864,10 +1291,20 @@ function openPanel(anchorButton) {
   }
 
   formatSelect.value = "mp3";
-  fillQualitySelect(qualitySelect, formatSelect.value);
+  fillQualitySelect(qualitySelect, formatSelect.value, -1);
+  fillLiveVideoQualities(liveQualitySelect, probeFromYouTubePage());
+  syncPanelCaptions(panel);
+  liveQualitySelect.addEventListener("change", () => syncPanelCaptions(panel));
+  void getSettings().then((settings) => {
+    if (!panel.isConnected) return;
+    const audioTag = (settings.defaultAudioFormat || "mp3").toUpperCase();
+    panel.querySelectorAll(".ytmp3-quick-audio-cap").forEach((el) => {
+      el.textContent = audioTag;
+    });
+  });
 
   formatSelect.addEventListener("change", () => {
-    fillQualitySelect(qualitySelect, formatSelect.value);
+    fillQualitySelect(qualitySelect, formatSelect.value, readLiveQuality(panel));
     contentSelect.value = isVideoFormat(formatSelect.value) ? "video" : "music";
   });
 
@@ -879,6 +1316,7 @@ function openPanel(anchorButton) {
 
   panel.querySelector(".ytmp3-quick-audio").addEventListener("click", async (event) => {
     event.stopPropagation();
+    ytdlWakeAppSync();
     const settings = await getSettings();
     await sendToApp({
       format: settings.defaultAudioFormat || "mp3",
@@ -890,11 +1328,12 @@ function openPanel(anchorButton) {
 
   panel.querySelector(".ytmp3-quick-video").addEventListener("click", async (event) => {
     event.stopPropagation();
+    ytdlWakeAppSync();
     const settings = await getSettings();
     await sendToApp({
       format: settings.defaultVideoFormat || "mp4",
-      quality: undefined,
-      contentKind: "auto",
+      quality: readLiveQuality(panel),
+      contentKind: "video",
       scope: "single",
     });
   });
@@ -902,6 +1341,7 @@ function openPanel(anchorButton) {
   if (playlist) {
     panel.querySelector(".ytmp3-quick-playlist-audio").addEventListener("click", async (event) => {
       event.stopPropagation();
+      ytdlWakeAppSync();
       const settings = await getSettings();
       await sendToApp({
         format: settings.defaultAudioFormat || "mp3",
@@ -913,11 +1353,12 @@ function openPanel(anchorButton) {
 
     panel.querySelector(".ytmp3-quick-playlist-video").addEventListener("click", async (event) => {
       event.stopPropagation();
+      ytdlWakeAppSync();
       const settings = await getSettings();
       await sendToApp({
         format: settings.defaultVideoFormat || "mp4",
-        quality: undefined,
-        contentKind: "auto",
+        quality: readLiveQuality(panel),
+        contentKind: "video",
         scope: "playlist",
       });
     });
@@ -925,12 +1366,26 @@ function openPanel(anchorButton) {
 
   panel.querySelector(".ytmp3-confirm").addEventListener("click", async (event) => {
     event.stopPropagation();
+    ytdlWakeAppSync();
+    const format = formatSelect.value;
+    const quality = isVideoFormat(format)
+      ? (Number.isFinite(Number(qualitySelect.value)) ? Number(qualitySelect.value) : readLiveQuality(panel))
+      : Number(qualitySelect.value);
     await sendToApp({
-      format: formatSelect.value,
-      quality: Number(qualitySelect.value),
+      format,
+      quality,
       contentKind: contentSelect.value,
       scope: scopeSelect?.value || "single",
     });
+  });
+
+  void rememberHealthSettings().then(() => {
+    if (!panel.isConnected) return;
+    fillLiveVideoQualities(liveQualitySelect, probeFromYouTubePage());
+    syncPanelCaptions(panel);
+    if (isVideoFormat(formatSelect.value)) {
+      fillQualitySelect(qualitySelect, formatSelect.value, readLiveQuality(panel));
+    }
   });
 
   panel.addEventListener("click", (event) => event.stopPropagation());
@@ -955,10 +1410,11 @@ function injectShadowStyles(root) {
       appearance: none; border: none; border-radius: 18px; background: #d32f2f; color: #fff;
       cursor: pointer; font: 500 14px/36px Roboto, Arial, sans-serif; padding: 0 16px;
       height: 36px; margin: 0 8px 0 0; box-sizing: border-box; display: inline-flex;
-      align-items: center; justify-content: center; flex: 0 0 auto; align-self: center;
+      align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; align-self: center;
     }
     .ytmp3-btn:hover:not(:disabled) { background: #b71c1c; }
     .ytmp3-btn:disabled { opacity: 0.7; cursor: wait; }
+    .ytmp3-btn-mark { font-size: 12px; line-height: 1; opacity: 0.95; }
   `;
 
   try {
@@ -992,6 +1448,8 @@ function applyButtonStyles(btn, like) {
 }
 
 function createWrapper(like) {
+  requestPagePlayer();
+  probeFromYouTubePage();
   const wrapper = document.createElement("div");
   wrapper.setAttribute(WRAPPER_ATTR, "1");
   wrapper.className = "ytmp3-wrapper";
@@ -1001,12 +1459,13 @@ function createWrapper(like) {
   btn.id = BTN_ID;
   btn.type = "button";
   btn.className = "ytmp3-btn";
-  btn.textContent = "Download";
-  btn.title = `Download with ${YTDL_APP_NAME} desktop app`;
+  btn.innerHTML = `<span class="ytmp3-btn-label">Download</span><span class="ytmp3-btn-mark" hidden title="Saved">✓</span>`;
+  btn.title = `Download with ${YTDL_APP_NAME} — click for Audio or Video`;
   applyButtonStyles(btn, like);
   btn.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
+    ytdlWakeAppSync();
     if (panelOpen) closePanel();
     else openPanel(btn);
   });
@@ -1115,6 +1574,12 @@ function tryInject() {
         existing.querySelector(`#${BTN_ID}`) || existing.firstElementChild,
         mount.like || mount.anchor
       );
+      requestPagePlayer();
+      probeFromYouTubePage();
+      if (localPhase === "idle") {
+        setButtonChrome(idleDownloadText(), { title: idleTitle() });
+      }
+      if (!statusPollTimer) startStatusPoll(localPhase === "queued" || localPhase === "downloading");
       return true;
     }
 
@@ -1123,6 +1588,7 @@ function tryInject() {
       existing.remove();
       existing = null;
     } else {
+      if (!statusPollTimer) startStatusPoll(localPhase === "queued" || localPhase === "downloading");
       return true;
     }
   }
@@ -1130,6 +1596,7 @@ function tryInject() {
   const wrapper = createWrapper(mount.like || mount.anchor || mount.container);
   const ok = ensurePlacement(wrapper, mount);
   if (!ok) wrapper.remove();
+  else startStatusPoll(false);
   return ok;
 }
 
@@ -1209,8 +1676,18 @@ function onPageChange() {
   const videoChanged = watchKey !== lastWatchKey;
   if (videoChanged) {
     lastWatchKey = watchKey;
+    suggestedDownloadLabel = "";
+    localPhase = "idle";
+    sawThisVisitDownload = false;
+    timedResetDone = false;
+    holdUntilAppSeesJob = 0;
+    pagePlayerResponse = null;
+    stopStatusPoll();
+    clearResetTimer();
     removeButton();
     startInjectBurst();
+    requestPagePlayer();
+    void rememberHealthSettings();
   }
 
   observeShadowTrees();

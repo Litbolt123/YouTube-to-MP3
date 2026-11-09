@@ -16,8 +16,11 @@ public sealed class AppSettings
     /// <summary>yt-dlp --audio-quality (0 = best VBR, 5 = default, 9 = worst).</summary>
     public int AudioQuality { get; set; } = 0;
 
-    /// <summary>MP4 height preset (0 = best, 5 = 1080p, 9 = 720p, 10–13 = 480/360/240/144).</summary>
-    public int VideoQuality { get; set; } = 0;
+    /// <summary>MP4 height preset: -1 = match screen, 0 = best available, 1 = 4K, 5 = 1080p, or a raw height (&gt;= 144).</summary>
+    public int VideoQuality { get; set; } = -1;
+
+    /// <summary>When true, "Best" / unset quality is capped to this PC's screen so 1080p displays don't get 4K.</summary>
+    public bool MatchVideoToScreen { get; set; } = true;
 
     /// <summary>mp3, m4a, opus, flac, wav, or mp4</summary>
     public string PreferredFormat { get; set; } = "mp3";
@@ -30,6 +33,9 @@ public sealed class AppSettings
 
     /// <summary>When true, open album track review for music playlists before downloading.</summary>
     public bool ReviewAlbumTracksBeforeDownload { get; set; } = true;
+
+    /// <summary>When true, open song details editor before single-track music/audio downloads.</summary>
+    public bool ReviewSongDetailsBeforeDownload { get; set; }
 
     /// <summary>Show the download log panel on the home screen.</summary>
     public bool ShowLogPanel { get; set; }
@@ -51,6 +57,12 @@ public sealed class AppSettings
 
     /// <summary>How many downloads may run at once (1–5). Each job includes download + convert/embed.</summary>
     public int MaxParallelDownloads { get; set; } = 1;
+
+    /// <summary>Always on vs auto-quit after idle (extension can wake the app when needed).</summary>
+    public BackgroundRunMode BackgroundRunMode { get; set; } = BackgroundRunMode.AlwaysOn;
+
+    /// <summary>Minutes of inactivity before auto-quit when <see cref="BackgroundRunMode"/> is IdleTimeout.</summary>
+    public int IdleTimeoutMinutes { get; set; } = 15;
 
     /// <summary>Auto-skip URLs already in history or on disk (unless force redownload).</summary>
     public bool SkipAlreadyDownloaded { get; set; } = true;
@@ -79,6 +91,15 @@ public sealed class AppSettings
 
     /// <summary>Shared secret the extension must send with each request.</summary>
     public string BrowserExtensionToken { get; set; } = "";
+
+    /// <summary>
+    /// After a YouTube-page download finishes: keep saying Downloaded until the file is gone,
+    /// or reset the button to Download after a few seconds (with a "downloaded before" mark).
+    /// </summary>
+    public string ExtensionButtonAfterDownload { get; set; } = "keepUntilFileGone";
+
+    /// <summary>Seconds before the YouTube button returns to Download when reset mode is timed.</summary>
+    public int ExtensionButtonResetSeconds { get; set; } = 5;
 
     public string? LastUpdateCheckUtc { get; set; }
 
@@ -139,6 +160,19 @@ public static class AppSettingsService
             settings.MaxParallelDownloads = 1;
         if (settings.MaxParallelDownloads > 5)
             settings.MaxParallelDownloads = 5;
+
+        if (settings.IdleTimeoutMinutes < 5)
+            settings.IdleTimeoutMinutes = 5;
+        if (settings.IdleTimeoutMinutes > 120)
+            settings.IdleTimeoutMinutes = 120;
+
+        if (settings.ExtensionButtonResetSeconds < 1)
+            settings.ExtensionButtonResetSeconds = 1;
+        if (settings.ExtensionButtonResetSeconds > 60)
+            settings.ExtensionButtonResetSeconds = 60;
+
+        if (!string.Equals(settings.ExtensionButtonAfterDownload, "resetAfterSeconds", StringComparison.OrdinalIgnoreCase))
+            settings.ExtensionButtonAfterDownload = "keepUntilFileGone";
     }
 
     public static void EnsureExtensionToken(AppSettings settings)

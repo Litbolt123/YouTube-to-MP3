@@ -14,14 +14,16 @@ $ytPath = Join-Path $dest 'yt-dlp.exe'
 $ffPath = Join-Path $dest 'ffmpeg.exe'
 $fpPath = Join-Path $dest 'ffprobe.exe'
 
-if (-not $Force -and (Test-Path $ytPath) -and (Test-Path $ffPath)) {
-    Write-Host "Bundled tools already present in $dest"
-    exit 0
-}
-
 Write-Host "Downloading yt-dlp..."
 Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe' `
     -OutFile $ytPath -UseBasicParsing
+
+if (-not $Force -and (Test-Path $ffPath)) {
+    Write-Host "Bundled tools ready (yt-dlp refreshed):"
+    Write-Host "  $ytPath"
+    Write-Host "  $ffPath"
+    exit 0
+}
 
 Write-Host "Downloading ffmpeg (BtbN win64 gpl)..."
 $zip = Join-Path $env:TEMP "lmh-yt-ffmpeg-bundle.zip"

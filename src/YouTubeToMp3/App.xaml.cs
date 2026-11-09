@@ -18,17 +18,32 @@ public partial class App : Application
     {
         if (!SingleInstanceService.TryBecomePrimaryInstance(out _singleInstanceMutex))
         {
-            SingleInstanceService.NotifyPrimaryInstance();
+            SingleInstanceService.NotifyPrimaryInstance(AutoStartService.ArgsExtensionWake(e.Args));
             Shutdown();
             return;
         }
 
         Settings = AppSettingsService.Load();
+        AppWakeProtocolService.EnsureRegistered();
         Settings.StartWithWindows = AutoStartService.IsEnabled();
         if (Settings.StartWithWindows)
             Settings.MinimizeToTray = true;
         DashboardUi.ApplyAppTheme(Settings.UseDarkTheme);
+        ScreenResolutionService.CaptureFromUiThread();
         base.OnStartup(e);
+
+        var startHidden = AutoStartService.ArgsRequestTray(e.Args) ||
+                          AutoStartService.ArgsExtensionWake(e.Args);
+        var main = new MainWindow();
+        MainWindow = main;
+        if (startHidden)
+        {
+            main.HideToTrayAtStartup();
+        }
+        else
+        {
+            main.Show();
+        }
 
         if (Settings.AutoCheckUpdates)
             SchedulePostStartupUpdateCheck();

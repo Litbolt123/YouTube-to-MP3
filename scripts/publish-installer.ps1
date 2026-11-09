@@ -43,7 +43,7 @@ if (Test-Path $toolsSrc) {
     Copy-Item $toolsSrc $toolsDest -Recurse -Force
 }
 else {
-    Write-Warning "Bundled tools not found at $toolsSrc - run scripts\fetch-bundled-tools.ps1 first."
+    throw "Bundled tools not found at $toolsSrc - run scripts\fetch-bundled-tools.ps1 first."
 }
 
 Write-Host "Published (installer build) to: $publishDir (Version $ver)"
