@@ -1,4 +1,4 @@
-namespace YouTubeToMp3.Services;
+﻿namespace YouTubeToMp3.Services;
 
 public enum UrlDownloadContext
 {
@@ -43,8 +43,14 @@ public static class PlaylistKindResolver
         if (YouTubeUrlHelper.IsMusicAlbumOrPlaylist(url))
             return false;
 
-        if (YouTubeUrlHelper.TryGetVideoId(url) is not null)
+        var listId = YouTubeUrlHelper.TryGetListId(url);
+        if (listId?.StartsWith("OLAK5uy_", StringComparison.OrdinalIgnoreCase) == true)
             return false;
+
+        // why: watch URLs that also carry a PL id are often videos, not albums — ask when Auto
+        if (YouTubeUrlHelper.TryGetVideoId(url) is not null &&
+            ContentKindDetector.TryGetCachedPlaylistKind(url) is null)
+            return true;
 
         return ContentKindDetector.TryGetCachedPlaylistKind(url) is null;
     }

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -15,6 +15,7 @@ public sealed class DownloadProgressEventArgs : EventArgs
     public int? PlaylistTotal { get; init; }
     public string? CurrentTrackTitle { get; init; }
     public string? CurrentVideoUrl { get; init; }
+    public DownloadPhase Phase { get; init; } = DownloadPhase.Starting;
 }
 
 public sealed class DownloadCompletedEventArgs : EventArgs
@@ -54,12 +55,18 @@ public sealed class YtDlpDownloadService : IDisposable
         @"\[youtube\]\s+([A-Za-z0-9_-]{11}):",
         RegexOptions.Compiled);
     private static readonly Regex MergeRegex = new(@"\[ExtractAudio\]|Deleting original file|\[Merger\]|Embedding thumbnail|\[ThumbnailsConvertor\]", RegexOptions.Compiled);
+    private static readonly Regex SizeOfRegex = new(@"\bof\s+([\d.]+)\s*(KiB|MiB|GiB|KB|MB|GB)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly long ProgressEmitIntervalTicks = Stopwatch.Frequency / 4;
 
     private Process? _process;
     private CancellationTokenSource? _cts;
     private long _lastProgressEmitTicks;
+    private TimeSpan? _mediaDuration;
+    private long _totalBytes;
+    private DownloadPhase _phase = DownloadPhase.Starting;
+    private readonly EtaSmoother _etaSmoother = new();
+    private DateTime? _mergeStartedUtc;
 
     public event EventHandler<DownloadProgressEventArgs>? Progress;
     public event EventHandler<DownloadCompletedEventArgs>? Completed;
@@ -119,6 +126,11 @@ public sealed class YtDlpDownloadService : IDisposable
             useDownloadArchive);
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _mediaDuration = null;
+        _totalBytes = 0;
+        _phase = DownloadPhase.Starting;
+        _mergeStartedUtc = null;
+        _etaSmoother.Reset();
         var allLines = new List<string>();
         var writtenFiles = new List<string>();
 
@@ -257,10 +269,14 @@ public sealed class YtDlpDownloadService : IDisposable
         {
             try
             {
+                _phase = DownloadPhase.EmbeddingCover;
+                _etaSmoother.SetPhase(DownloadPhase.EmbeddingCover);
                 Progress?.Invoke(this, new DownloadProgressEventArgs
                 {
-                    Line = useCustomCover ? "Embedding custom cover art…" : "Embedding cover art…",
-                    Status = useCustomCover ? "Embedding custom cover art…" : "Embedding cover art…",
+                    Line = useCustomCover ? "Embedding custom cover art..." : "Embedding cover art...",
+                    Status = useCustomCover ? "Embedding custom cover art..." : "Embedding cover art...",
+                    Percent = 0,
+                    Phase = DownloadPhase.EmbeddingCover,
                 });
 
                 var targets = writtenFiles
@@ -293,12 +309,32 @@ public sealed class YtDlpDownloadService : IDisposable
                 foreach (var target in targets)
                 {
                     _cts.Token.ThrowIfCancellationRequested();
-                    await CoverArtEmbedService.EmbedAsync(target, coverPath!, _cts.Token).ConfigureAwait(false);
+                    var coverProgress = new Progress<double>(pct =>
+                    {
+                        var coverEta = DownloadSpeedHistory.EstimateCover(_mediaDuration);
+                        var rem = coverEta.TotalSeconds * (1 - pct / 100.0);
+                        var smoothed = _etaSmoother.Observe(TimeSpan.FromSeconds(Math.Max(0, rem)));
+                        Progress?.Invoke(this, new DownloadProgressEventArgs
+                        {
+                            Line = useCustomCover
+                                ? $"Embedding custom cover art... {pct:0.#}%"
+                                : $"Embedding cover art... {pct:0.#}%",
+                            Status = useCustomCover
+                                ? $"Embedding custom cover art... {pct:0.#}%"
+                                : $"Embedding cover art... {pct:0.#}%",
+                            Percent = pct,
+                            Phase = DownloadPhase.EmbeddingCover,
+                            Eta = smoothed is { } s ? QueueDisplayHelper.FormatDuration(s) : null,
+                        });
+                    });
+                    await CoverArtEmbedService.EmbedAsync(target, coverPath!, coverProgress, _cts.Token).ConfigureAwait(false);
                     embedded++;
                     Progress?.Invoke(this, new DownloadProgressEventArgs
                     {
-                        Line = $"Embedding cover art ({embedded}/{targets.Count})…",
-                        Status = $"Embedding cover art ({embedded}/{targets.Count})…",
+                        Line = $"Embedding cover art ({embedded}/{targets.Count})...",
+                        Status = $"Embedding cover art ({embedded}/{targets.Count})...",
+                        Percent = 100.0 * embedded / Math.Max(1, targets.Count),
+                        Phase = DownloadPhase.EmbeddingCover,
                     });
                 }
             }
@@ -414,7 +450,7 @@ public sealed class YtDlpDownloadService : IDisposable
         }
         else if (contentKind == ContentKind.Music && YouTubeUrlHelper.TryGetListId(url) is not null)
         {
-            // Single track from an album URL — still map playlist title to album for tags + filename.
+            // Single track from an album URL â€” still map playlist title to album for tags + filename.
             sb.Append("--parse-metadata \"+%(album)s:%(playlist_title)s\" ");
             if (string.IsNullOrWhiteSpace(metadataOverride?.AlbumArtist))
             {
@@ -442,8 +478,8 @@ public sealed class YtDlpDownloadService : IDisposable
             sb.Append($"-f \"{formatSelector}\" ");
             sb.Append("--merge-output-format mp4 ");
             sb.Append("--remux-video mp4 ");
-            // Re-encode to AAC if only Opus audio is available — Windows Media Player cannot play Opus in MP4.
-            sb.Append("--postprocessor-args \"Merger+ffmpeg_o:-c:a aac -b:a 192k\" ");
+            // Re-encode to AAC if only Opus audio is available â€” Windows Media Player cannot play Opus in MP4.
+            sb.Append("--postprocessor-args \"Merger+ffmpeg_o:-c:a aac -b:a 192k -progress pipe:2\" ");
         }
 
         if (embedThumbnail && DownloadFormats.IsVideo(format))
@@ -451,6 +487,8 @@ public sealed class YtDlpDownloadService : IDisposable
             sb.Append("--embed-thumbnail --convert-thumbnails jpg ");
         }
 
+        // why: duration lets merge/cover progress bars map ffmpeg time= to a real percent
+        sb.Append("--print \"DURATION:%(duration)s\" ");
         sb.Append($"\"{url}\"");
         return sb.ToString();
     }
@@ -550,10 +588,66 @@ public sealed class YtDlpDownloadService : IDisposable
         if (string.IsNullOrWhiteSpace(line))
             return;
 
+        if (FfmpegProgressParser.TryParseDuration(line, out var parsedDuration))
+            _mediaDuration = parsedDuration;
+
         double? percent = null;
         var match = ProgressRegex.Match(line);
         if (match.Success && double.TryParse(match.Groups[1].Value, out var p))
             percent = p;
+
+        var sizeMatch = SizeOfRegex.Match(line);
+        if (sizeMatch.Success && TryParseByteSize(sizeMatch.Groups[1].Value, sizeMatch.Groups[2].Value, out var bytes))
+            _totalBytes = Math.Max(_totalBytes, bytes);
+
+        var isMergeLine = MergeRegex.IsMatch(line);
+        var isFfmpegProgress = line.StartsWith("frame=", StringComparison.Ordinal) ||
+                               line.StartsWith("size=", StringComparison.Ordinal) ||
+                               line.StartsWith("out_time", StringComparison.OrdinalIgnoreCase) ||
+                               line.StartsWith("progress=", StringComparison.OrdinalIgnoreCase) ||
+                               (line.Contains("time=", StringComparison.Ordinal) && line.Contains("bitrate=", StringComparison.Ordinal));
+
+        if (isMergeLine && line.Contains("[Merger]", StringComparison.OrdinalIgnoreCase))
+        {
+            _phase = DownloadPhase.Merging;
+            _etaSmoother.SetPhase(DownloadPhase.Merging);
+            _mergeStartedUtc = DateTime.UtcNow;
+            percent ??= 0;
+        }
+        else if (isMergeLine && (
+                     line.Contains("[ExtractAudio]", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("Embedding thumbnail", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("[ThumbnailsConvertor]", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (_phase is DownloadPhase.Starting or DownloadPhase.Downloading)
+            {
+                _phase = DownloadPhase.Merging;
+                _etaSmoother.SetPhase(DownloadPhase.Merging);
+                _mergeStartedUtc ??= DateTime.UtcNow;
+            }
+        }
+
+        if ((_phase == DownloadPhase.Merging || isFfmpegProgress) &&
+            FfmpegProgressParser.TryParseTimestamp(line, out var position))
+        {
+            _phase = DownloadPhase.Merging;
+            if (_mediaDuration is { } duration && duration > TimeSpan.Zero)
+            {
+                percent = FfmpegProgressParser.ToPercent(position, duration);
+            }
+            else if (_mergeStartedUtc is { } started)
+            {
+                var expected = DownloadSpeedHistory.EstimateMerge(_totalBytes, _mediaDuration);
+                var elapsed = DateTime.UtcNow - started;
+                percent = Math.Clamp(100.0 * elapsed.TotalSeconds / Math.Max(1.0, expected.TotalSeconds), 0, 99.5);
+            }
+        }
+
+        if (_phase == DownloadPhase.Starting && percent is not null)
+        {
+            _phase = DownloadPhase.Downloading;
+            _etaSmoother.SetPhase(DownloadPhase.Downloading);
+        }
 
         if (IsThrottledProgressLine(line, percent) && !TryClaimProgressSlot())
             return;
@@ -604,33 +698,86 @@ public sealed class YtDlpDownloadService : IDisposable
         }
 
         string? status = null;
-        if (MergeRegex.IsMatch(line))
+        if (_phase == DownloadPhase.Merging || isMergeLine)
+        {
             status = DownloadFormats.IsAudio(format)
-                ? (line.Contains("thumbnail", StringComparison.OrdinalIgnoreCase) ? "Embedding cover art…" : $"Converting to {DownloadFormats.ToDisplayLabel(format)}…")
-                : (line.Contains("thumbnail", StringComparison.OrdinalIgnoreCase) ? "Embedding cover art…" : "Merging video…");
+                ? (line.Contains("thumbnail", StringComparison.OrdinalIgnoreCase)
+                    ? "Embedding cover art..."
+                    : $"Converting to {DownloadFormats.ToDisplayLabel(format)}...")
+                : (line.Contains("thumbnail", StringComparison.OrdinalIgnoreCase)
+                    ? "Embedding cover art..."
+                    : "Merging video...");
+            if (percent is { } mergePct)
+                status = $"{status.TrimEnd('.')} {mergePct:0.#}%";
+        }
         else if (playlistIndex is not null && playlistTotal is not null)
             status = eta is not null && percent is not null
-                ? $"Item {playlistIndex}/{playlistTotal} · {percent:0.#}% · ETA {eta}"
-                : $"Downloading playlist item {playlistIndex}/{playlistTotal}…";
+                ? $"Item {playlistIndex}/{playlistTotal} Â· {percent:0.#}% Â· ETA {eta}"
+                : $"Downloading playlist item {playlistIndex}/{playlistTotal}...";
         else if (line.Contains("Downloading", StringComparison.OrdinalIgnoreCase))
-            status = eta is not null ? $"Downloading… ETA {eta}" : "Downloading…";
+            status = eta is not null ? $"Downloading... ETA {eta}" : "Downloading...";
         else if (line.StartsWith("[download]", StringComparison.Ordinal))
             status = eta is not null && percent is not null
-                ? $"Downloading… {percent:0.#}% · ETA {eta}"
+                ? $"Downloading... {percent:0.#}% Â· ETA {eta}"
                 : line;
+
+        TimeSpan? rawEta = QueueDisplayHelper.ParseEta(eta);
+        if (_phase == DownloadPhase.Downloading)
+        {
+            var mergeEstimate = DownloadFormats.IsVideo(format)
+                ? DownloadSpeedHistory.EstimateMerge(_totalBytes, _mediaDuration)
+                : TimeSpan.Zero;
+            var downloadPart = rawEta ?? DownloadSpeedHistory.EstimateDownloadRemaining(percent, _totalBytes > 0 ? _totalBytes : null);
+            rawEta = EtaSmoother.CombinePhases(downloadPart, mergeEstimate, null);
+        }
+        else if (_phase == DownloadPhase.Merging)
+        {
+            if (percent is { } mergePct && mergePct < 100)
+            {
+                var expected = DownloadSpeedHistory.EstimateMerge(_totalBytes, _mediaDuration);
+                rawEta = TimeSpan.FromSeconds(expected.TotalSeconds * (1 - mergePct / 100.0));
+            }
+            else if (_mergeStartedUtc is { } started)
+            {
+                var expected = DownloadSpeedHistory.EstimateMerge(_totalBytes, _mediaDuration);
+                var left = expected - (DateTime.UtcNow - started);
+                rawEta = left > TimeSpan.Zero ? left : TimeSpan.FromSeconds(2);
+            }
+        }
+
+        var smoothed = _etaSmoother.Observe(rawEta);
+        var etaLabel = smoothed is { } s ? QueueDisplayHelper.FormatDuration(s) : eta;
 
         Progress?.Invoke(this, new DownloadProgressEventArgs
         {
             Line = line,
             Percent = percent,
-            Eta = eta,
+            Eta = etaLabel,
             Speed = speed,
             PlaylistIndex = playlistIndex,
             PlaylistTotal = playlistTotal,
             CurrentTrackTitle = currentTrackTitle,
             CurrentVideoUrl = currentVideoUrl,
             Status = status,
+            Phase = _phase,
         });
+    }
+
+    private static bool TryParseByteSize(string value, string unit, out long bytes)
+    {
+        bytes = 0;
+        if (!double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var n))
+            return false;
+
+        var mult = unit.ToLowerInvariant() switch
+        {
+            "kib" or "kb" => 1024d,
+            "mib" or "mb" => 1024d * 1024d,
+            "gib" or "gb" => 1024d * 1024d * 1024d,
+            _ => 1d,
+        };
+        bytes = (long)(n * mult);
+        return bytes > 0;
     }
 
     internal static bool IsThrottledProgressLine(string line, double? percent)
@@ -638,7 +785,9 @@ public sealed class YtDlpDownloadService : IDisposable
         if (percent is { } value)
             return value < 100 || !line.Contains(" in ", StringComparison.Ordinal);
         return line.StartsWith("frame=", StringComparison.Ordinal) ||
-               line.StartsWith("size=", StringComparison.Ordinal);
+               line.StartsWith("size=", StringComparison.Ordinal) ||
+               line.StartsWith("out_time", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("progress=", StringComparison.OrdinalIgnoreCase);
     }
 
     private bool TryClaimProgressSlot()

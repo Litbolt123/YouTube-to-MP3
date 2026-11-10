@@ -152,17 +152,18 @@
                             </StackPanel>
                         </Grid>
 
-                        <Expander x:Name="CoverOptionsExpander" Style="{DynamicResource DashExpander}" Margin="0,0,0,4" IsExpanded="False">
+                        <Expander x:Name="AdvancedOptionsExpander" Style="{DynamicResource DashExpander}" Margin="0,0,0,4" IsExpanded="False">
                             <Expander.Header>
-                                <TextBlock Text="Cover art options" Foreground="{DynamicResource DashTextPrimaryBrush}" FontSize="12"/>
+                                <TextBlock Text="Advanced" Foreground="{DynamicResource DashTextPrimaryBrush}" FontSize="12"/>
                             </Expander.Header>
                             <StackPanel Margin="0,6,0,0">
+                                <TextBlock Text="Cover art" Style="{DynamicResource DashSettingLabel}" Margin="0,0,0,4"/>
                                 <CheckBox x:Name="EmbedThumbnailBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,6"
                                           Content="Embed thumbnail as cover art"
                                           Checked="EmbedThumbnailBox_OnChanged"
                                           Unchecked="EmbedThumbnailBox_OnChanged"/>
                                 <WrapPanel Margin="0,0,0,6">
-                                    <Button x:Name="ChooseCoverArtButton" Content="Choose cover…" Padding="10,5" Margin="0,0,8,0"
+                                    <Button x:Name="ChooseCoverArtButton" Content="Choose cover..." Padding="10,5" Margin="0,0,8,0"
                                             Style="{DynamicResource DashToolbarButton}" Click="ChooseCoverArt_OnClick"/>
                                     <TextBlock x:Name="CoverArtStatusText" Style="{DynamicResource DashHintText}" VerticalAlignment="Center"
                                                Text="Cover: thumbnail default" FontSize="11"/>
@@ -171,20 +172,20 @@
                                          Padding="8,0"
                                          ToolTip="Paste a YouTube URL for cover art"
                                          TextChanged="CoverUrlBox_OnTextChanged"/>
+                                <TextBlock Text="Queue options" Style="{DynamicResource DashSettingLabel}" Margin="0,10,0,4"/>
+                                <WrapPanel Margin="0,0,0,4">
+                                    <CheckBox x:Name="SkipAlreadyDownloadedBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,14,0"
+                                              Content="Skip already downloaded"
+                                              Checked="SkipAlreadyDownloadedBox_OnChanged"
+                                              Unchecked="SkipAlreadyDownloadedBox_OnChanged"/>
+                                    <CheckBox x:Name="AddToQueueBox" Style="{DynamicResource DashSimpleCheckBox}"
+                                              Content="Add to queue"
+                                              ToolTip="Queue downloads instead of starting immediately"/>
+                                </WrapPanel>
+                                <TextBlock x:Name="DownloadOptionsHint" Style="{DynamicResource DashHintText}" Margin="0,2,0,0" TextWrapping="Wrap" FontSize="11"
+                                           Text="Skip already downloaded avoids duplicates from history. Add to queue lines up several links before you start."/>
                             </StackPanel>
                         </Expander>
-
-                        <WrapPanel Margin="0,2,0,0">
-                            <CheckBox x:Name="SkipAlreadyDownloadedBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,14,0"
-                                      Content="Skip already downloaded"
-                                      Checked="SkipAlreadyDownloadedBox_OnChanged"
-                                      Unchecked="SkipAlreadyDownloadedBox_OnChanged"/>
-                            <CheckBox x:Name="AddToQueueBox" Style="{DynamicResource DashSimpleCheckBox}"
-                                      Content="Add to queue"
-                                      ToolTip="Queue downloads instead of starting immediately"/>
-                        </WrapPanel>
-                        <TextBlock x:Name="DownloadOptionsHint" Style="{DynamicResource DashHintText}" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="11"
-                                   Text="Skip already downloaded avoids duplicates from history. Add to queue lines up several links before you start."/>
                     </StackPanel>
                 </Border>
 
@@ -195,7 +196,7 @@
                         <TextBlock x:Name="ActionsSectionHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
                                    Text="Start a download. The main buttons change based on your link (single video, playlist, or album)."/>
                         <TextBlock x:Name="ActionsDetailHint" Style="{DynamicResource DashHintText}" Margin="0,0,0,10" TextWrapping="Wrap" FontSize="11"
-                                   Text="Buttons adapt to your link: song/video only, whole album/playlist, edit song details, or review album tracks before download."/>
+                                   Text="Main buttons adapt to your link. Open Advanced for cover art, queue options, and extra tools."/>
                         <WrapPanel>
                             <Button x:Name="DownloadVideoButton" Content="This video only" Padding="18,10" Margin="0,0,8,8"
                                     Style="{DynamicResource DashPrimaryButton}" Click="DownloadVideo_OnClick"/>
@@ -212,15 +213,24 @@
                         <WrapPanel>
                             <Button x:Name="CancelButton" Content="Cancel" Padding="12,6" Margin="0,0,8,0" IsEnabled="False"
                                     Style="{DynamicResource DashToolbarButton}" Click="Cancel_OnClick"/>
-                            <Button x:Name="PauseQueueButton" Content="Pause queue" Padding="12,6" Margin="0,0,8,0"
-                                    Style="{DynamicResource DashToolbarButton}" Click="PauseQueue_OnClick"/>
-                            <Button Content="Open folder" Padding="12,6" Margin="0,0,8,0"
-                                    Style="{DynamicResource DashToolbarButton}" Click="OpenFolder_OnClick"/>
-                            <Button Content="Logs folder" Padding="12,6"
-                                    Style="{DynamicResource DashToolbarButton}" Click="OpenLogsFolder_OnClick"/>
                         </WrapPanel>
-                        <TextBlock x:Name="ActionsUtilityHint" Style="{DynamicResource DashHintText}" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="11"
-                                   Text="Cancel stops the active job. Pause queue holds the rest. Open folder opens your save location; Logs folder shows technical output."/>
+                        <Expander x:Name="ActionsAdvancedExpander" Style="{DynamicResource DashExpander}" Margin="0,8,0,0" IsExpanded="False">
+                            <Expander.Header>
+                                <TextBlock Text="More actions" Foreground="{DynamicResource DashTextPrimaryBrush}" FontSize="12"/>
+                            </Expander.Header>
+                            <StackPanel Margin="0,6,0,0">
+                                <WrapPanel>
+                                    <Button x:Name="PauseQueueButton" Content="Pause queue" Padding="12,6" Margin="0,0,8,0"
+                                            Style="{DynamicResource DashToolbarButton}" Click="PauseQueue_OnClick"/>
+                                    <Button Content="Open folder" Padding="12,6" Margin="0,0,8,0"
+                                            Style="{DynamicResource DashToolbarButton}" Click="OpenFolder_OnClick"/>
+                                    <Button Content="Logs folder" Padding="12,6"
+                                            Style="{DynamicResource DashToolbarButton}" Click="OpenLogsFolder_OnClick"/>
+                                </WrapPanel>
+                                <TextBlock x:Name="ActionsUtilityHint" Style="{DynamicResource DashHintText}" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="11"
+                                           Text="Cancel stops the active job. Pause queue holds the rest. Open folder opens your save location; Logs folder shows technical output."/>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </Border>
 

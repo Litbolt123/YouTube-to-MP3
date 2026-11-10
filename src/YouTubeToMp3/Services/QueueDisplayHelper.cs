@@ -174,6 +174,12 @@ public static class QueueDisplayHelper
             else
                 remaining += avgItem;
 
+            if (runtime.Phase == DownloadPhase.Downloading &&
+                DownloadFormats.IsVideo(activeJob.Format))
+            {
+                remaining += DownloadSpeedHistory.EstimateMerge(0, null);
+            }
+
             if (activeJob.Scope == DownloadScope.Playlist &&
                 runtime.PlaylistIndex is { } idx &&
                 runtime.PlaylistTotal is { } total &&

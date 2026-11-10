@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Media;
@@ -15,9 +15,9 @@ public partial class MainWindow
 {
     private static readonly HashSet<string> PreviewPlaceholders = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Loading preview…",
+        "Loading previewâ€¦",
         "(Preview unavailable)",
-        "(Multiple URLs — filenames vary)",
+        "(Multiple URLs â€” filenames vary)",
     };
 
     private sealed class ActiveDownloadContext
@@ -776,17 +776,17 @@ public partial class MainWindow
         DownloadMetricsPanel.Visibility = Visibility.Visible;
         var label = PrimaryJob is { } job
             ? QueueDisplayHelper.TitleFor(job, _queueRuntime)
-            : "Downloading…";
+            : "Downloadingâ€¦";
         var trackHint = PrimaryJob is { } activeJob &&
                         (activeJob.Scope == DownloadScope.Playlist || activeJob.PlaylistTrackIndex is not null)
             ? QueueDisplayHelper.PlaylistTrackHint(_queueRuntime, activeJob)
             : null;
         MetricTrackText.Text = !string.IsNullOrWhiteSpace(trackHint)
             ? $"{label}\n{trackHint}"
-            : label ?? "—";
+            : label ?? "â€”";
 
         var fileEta = _queueRuntime.LiveFileEta;
-        MetricFileEtaText.Text = !string.IsNullOrWhiteSpace(fileEta) ? fileEta! : "—";
+        MetricFileEtaText.Text = !string.IsNullOrWhiteSpace(fileEta) ? fileEta! : "â€”";
 
         var rawEta = QueueDisplayHelper.EstimateQueueRemaining(
             _queueRuntime,
@@ -797,7 +797,7 @@ public partial class MainWindow
         _queueEtaCountdown.Sync(rawEta);
         MetricQueueEtaText.Text = _queueEtaCountdown.Remaining is { } q && q > TimeSpan.Zero
             ? $"~{QueueDisplayHelper.FormatDuration(q)}"
-            : "—";
+            : "â€”";
     }
 
     private void EmbedThumbnailBox_OnChanged(object sender, RoutedEventArgs e)
@@ -1026,7 +1026,7 @@ public partial class MainWindow
         FilenamePreviewBox.Text = details.FileNameWithoutExtension;
         _updatingPreviewBox = false;
         _predictedFileName = details.FileNameWithoutExtension;
-        StatusText.Text = "Song details updated — download when ready.";
+        StatusText.Text = "Song details updated â€” download when ready.";
     }
 
     private bool TryGetPendingSongDetails(string url, out SongDetailsResult? details)
@@ -1193,7 +1193,7 @@ public partial class MainWindow
 
         try
         {
-            CoverArtStatusText.Text = "Fetching cover…";
+            CoverArtStatusText.Text = "Fetching coverâ€¦";
             var (path, error) = await CoverArtFetchService.FetchThumbnailFromUrlAsync(url, token)
                 .ConfigureAwait(true);
             if (token.IsCancellationRequested)
@@ -1256,18 +1256,31 @@ public partial class MainWindow
         {
             if (YouTubeUrlHelper.TryGetListId(url) is not null)
             {
+                string? title = null;
                 if (YouTubeUrlHelper.TryGetVideoId(url) is not null)
-                    return;
+                {
+                    var meta = await YtDlpMetadataService.GetTrackMetadataAsync(
+                        url, DownloadScope.SingleVideo, GetSelectedFormat(), ContentKind.Video, token).ConfigureAwait(true);
+                    title = meta?.Title;
+                }
+                else
+                {
+                    var playlistUrl = YouTubeUrlHelper.TryGetPlaylistUrl(url);
+                    if (playlistUrl is null)
+                        return;
+                    title = await YtDlpMetadataService.GetPlaylistTitleAsync(playlistUrl, token).ConfigureAwait(true);
+                }
 
-                var playlistUrl = YouTubeUrlHelper.TryGetPlaylistUrl(url);
-                if (playlistUrl is null)
-                    return;
-
-                var title = await YtDlpMetadataService.GetPlaylistTitleAsync(playlistUrl, token).ConfigureAwait(true);
                 if (token.IsCancellationRequested)
                     return;
 
-                var kind = MusicPlaylistHeuristics.LooksLikeMusic(title) ? ContentKind.Music : ContentKind.Video;
+                var kind = ContentKindDetector.Detect(new ContentKindSignals
+                {
+                    Url = url,
+                    Title = title,
+                    PlaylistTitle = title,
+                    IsPlaylist = true,
+                });
                 ContentKindDetector.CachePlaylistKind(url, kind);
                 await Dispatcher.InvokeAsync(() =>
                 {
@@ -1286,7 +1299,7 @@ public partial class MainWindow
             await Dispatcher.InvokeAsync(() =>
             {
                 if (!token.IsCancellationRequested && !IsProcessing)
-                    StatusText.Text = "Checking for album or playlist…";
+                    StatusText.Text = "Checking for album or playlistâ€¦";
             });
 
             var discovered = await PlaylistDiscoveryService.TryDiscoverFromVideoAsync(url, token).ConfigureAwait(true);
@@ -1360,7 +1373,7 @@ public partial class MainWindow
         _previewIsLoading = true;
         try
         {
-            StatusText.Text = "Fetching filename…";
+            StatusText.Text = "Fetching filenameâ€¦";
             var preview = await YtDlpPreviewService.GetPreviewAsync(
                 url, scope, format, namingKind, outputFolder).ConfigureAwait(true);
 
@@ -1379,14 +1392,14 @@ public partial class MainWindow
 
         if (_previewTask is { IsCompleted: false })
         {
-            StatusText.Text = "Fetching filename…";
+            StatusText.Text = "Fetching filenameâ€¦";
             try
             {
                 await _previewTask.ConfigureAwait(true);
             }
             catch
             {
-                /* preview failed — proceed with yt-dlp default naming */
+                /* preview failed â€” proceed with yt-dlp default naming */
             }
 
             return;
@@ -1400,14 +1413,14 @@ public partial class MainWindow
             return;
 
         StartPreviewTask();
-        StatusText.Text = "Fetching filename…";
+        StatusText.Text = "Fetching filenameâ€¦";
         try
         {
             await _previewTask.ConfigureAwait(true);
         }
         catch
         {
-            /* preview failed — proceed with yt-dlp default naming */
+            /* preview failed â€” proceed with yt-dlp default naming */
         }
     }
 
@@ -1420,7 +1433,7 @@ public partial class MainWindow
         var urls = UrlBatchParser.Parse(UrlBox.Text);
         if (urls.Count != 1)
         {
-            SetPreviewText(urls.Count > 1 ? "(Multiple URLs — filenames vary)" : "");
+            SetPreviewText(urls.Count > 1 ? "(Multiple URLs â€” filenames vary)" : "");
             _predictedFileName = null;
             _predictedFullPath = null;
             SetCoverImage(CoverPreviewImage, CoverPreviewPlaceholder, null);
@@ -1435,7 +1448,7 @@ public partial class MainWindow
         var outputFolder = ContentPathResolver.ResolveOutputFolder(App.Settings, chosen, format);
 
         _previewIsLoading = true;
-        SetPreviewText("Loading preview…");
+        SetPreviewText("Loading previewâ€¦");
         try
         {
             var preview = await YtDlpPreviewService.GetPreviewAsync(
@@ -1457,6 +1470,21 @@ public partial class MainWindow
             _predictedFileName = preview.FileName;
             _predictedFullPath = preview.FullPath;
             SetPreviewText(preview.FileName);
+            if (GetSelectedContentKind() == ContentKind.Auto &&
+                !string.IsNullOrWhiteSpace(preview.Title))
+            {
+                var refined = ContentKindDetector.Detect(new ContentKindSignals
+                {
+                    Url = url,
+                    Title = preview.Title,
+                    IsPlaylist = YouTubeUrlHelper.TryGetListId(url) is not null,
+                });
+                if (YouTubeUrlHelper.TryGetListId(url) is not null)
+                    ContentKindDetector.CachePlaylistKind(url, refined);
+                ApplySmartFormatDefaults();
+                UpdateContentHint();
+                UpdateDownloadActionsUi();
+            }
             await RefreshUrlCoverPreviewAsync().ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -1476,6 +1504,23 @@ public partial class MainWindow
         _updatingPreviewBox = false;
     }
 
+
+    private ContentKind ResolveAutoContentKind(string url)
+    {
+        var title = !_previewIsLoading &&
+                    !string.IsNullOrWhiteSpace(FilenamePreviewBox.Text) &&
+                    !PreviewPlaceholders.Contains(FilenamePreviewBox.Text)
+            ? Path.GetFileNameWithoutExtension(FilenamePreviewBox.Text)
+            : null;
+
+        return ContentKindDetector.Detect(new ContentKindSignals
+        {
+            Url = url,
+            Title = title,
+            IsPlaylist = YouTubeUrlHelper.TryGetListId(url) is not null,
+        });
+    }
+
     private void ApplySmartFormatDefaults()
     {
         if (_formatManuallyChanged || GetSelectedContentKind() != ContentKind.Auto)
@@ -1485,7 +1530,7 @@ public partial class MainWindow
         if (urls.Count != 1)
             return;
 
-        var resolved = ContentKindDetector.Resolve(ContentKind.Auto, urls[0]);
+        var resolved = ResolveAutoContentKind(urls[0]);
         var suggested = ContentKindDetector.SuggestedFormat(resolved);
         _applyingSmartFormat = true;
         SelectFormat(DownloadFormats.ToTag(suggested));
@@ -1515,18 +1560,18 @@ public partial class MainWindow
         ContentHintText.Visibility = Visibility.Visible;
         var chosen = GetSelectedContentKind();
         var format = GetSelectedFormat();
-        var namingKind = ContentKindDetector.Resolve(chosen, url);
+        var namingKind = chosen == ContentKind.Auto ? ResolveAutoContentKind(url) : ContentKindDetector.Resolve(chosen, url);
         var storageKind = ContentPathResolver.ResolveStorageKind(chosen, format);
         var targetFolder = ContentPathResolver.ResolveOutputFolder(App.Settings, chosen, format);
 
         var label = ContentKindDetector.DisplayLabel(namingKind);
         var storageLabel = ContentKindDetector.DisplayLabel(storageKind);
         var emoji = ContentKindDetector.Emoji(namingKind);
-        var batch = urls.Count > 1 ? $" · {urls.Count} URLs" : "";
+        var batch = urls.Count > 1 ? $" Â· {urls.Count} URLs" : "";
 
         ContentHintText.Text = chosen == ContentKind.Auto
-            ? $"{emoji} Detected: {label}{batch} — saves to {targetFolder} ({format.ToString().ToUpperInvariant()} → {storageLabel} folder)"
-            : $"{emoji} {label}{batch} — saves to {targetFolder}";
+            ? $"{emoji} Detected: {label}{batch} â€” saves to {targetFolder} ({format.ToString().ToUpperInvariant()} â†’ {storageLabel} folder)"
+            : $"{emoji} {label}{batch} â€” saves to {targetFolder}";
 
         UpdateDownloadActionsUi();
     }
@@ -1643,14 +1688,14 @@ public partial class MainWindow
             if (string.IsNullOrWhiteSpace(title))
                 return;
 
-            var kind = MusicPlaylistHeuristics.LooksLikeMusic(title) ? ContentKind.Music : ContentKind.Video;
+            var kind = ContentKindDetector.Detect(new ContentKindSignals { Url = url, Title = title, PlaylistTitle = title, IsPlaylist = true });
             ContentKindDetector.CachePlaylistKind(url, kind);
             UpdateContentHint();
             UpdateDownloadActionsUi();
         }
         catch
         {
-            /* ignore probe failures — prompt later if needed */
+            /* ignore probe failures â€” prompt later if needed */
         }
     }
 
@@ -1667,7 +1712,7 @@ public partial class MainWindow
         _pendingUpdate = result;
         UpdateAvailabilityCache.Set(result.LatestVersion, result.InstallerDownloadUrl);
         UpdateTitle.Text = $"Version {result.LatestVersion} is available";
-        UpdateBody.Text = $"You are on {App.VersionDisplay}. Run the installer to update — your settings in {AppPaths.DataDirectory} are kept.";
+        UpdateBody.Text = $"You are on {App.VersionDisplay}. Run the installer to update â€” your settings in {AppPaths.DataDirectory} are kept.";
         UpdateCard.Visibility = Visibility.Visible;
     }
 
@@ -1876,7 +1921,7 @@ public partial class MainWindow
         }
 
         var previousStatus = StatusText.Text;
-        StatusText.Text = "Detecting song details…";
+        StatusText.Text = "Detecting song detailsâ€¦";
         SongDetailsResult? edited;
         try
         {
@@ -1920,7 +1965,7 @@ public partial class MainWindow
         if (decision is DuplicateDecision.Skip or DuplicateDecision.Cancel)
         {
             if (decision == DuplicateDecision.Skip)
-                StatusText.Text = "Skipped — already downloaded.";
+                StatusText.Text = "Skipped â€” already downloaded.";
             return;
         }
 
@@ -2102,9 +2147,9 @@ public partial class MainWindow
         {
             StatusText.Text = skipped > 0
                 ? skipped == 1
-                    ? "Skipped — already downloaded."
+                    ? "Skipped â€” already downloaded."
                     : $"Skipped {skipped} already-downloaded URL(s)."
-                : "Nothing to download — check URLs or try a different scope.";
+                : "Nothing to download â€” check URLs or try a different scope.";
             return;
         }
 
@@ -2120,7 +2165,7 @@ public partial class MainWindow
     {
         var previousStatus = StatusText.Text;
         url = await PlaylistDiscoveryService.EnsurePlaylistUrlAsync(url).ConfigureAwait(true);
-        StatusText.Text = "Detecting album tracks…";
+        StatusText.Text = "Detecting album tracksâ€¦";
         try
         {
             var review = await YtDlpMetadataService.GetAlbumReviewAsync(
@@ -2132,8 +2177,8 @@ public partial class MainWindow
                     Dispatcher.Invoke(() =>
                     {
                         StatusText.Text = p.Total > 0
-                            ? $"Detecting track {p.Done} of {p.Total}…"
-                            : p.Message ?? "Detecting album tracks…";
+                            ? $"Detecting track {p.Done} of {p.Total}â€¦"
+                            : p.Message ?? "Detecting album tracksâ€¦";
                     });
                 })).ConfigureAwait(true);
 
@@ -2179,14 +2224,14 @@ public partial class MainWindow
         if (!IsLikelyYouTubeUrl(request.Url))
         {
             _tray.NotifyExtensionDownloadFailed("Not a YouTube URL.");
-            AppendLog($"Extension download ignored — not a YouTube URL: {request.Url}");
+            AppendLog($"Extension download ignored â€” not a YouTube URL: {request.Url}");
             return;
         }
 
         var tools = ToolDependencyService.Check();
         if (!tools.AllFound)
         {
-            StatusText.Text = "Extension download skipped — install yt-dlp and ffmpeg first.";
+            StatusText.Text = "Extension download skipped â€” install yt-dlp and ffmpeg first.";
             _tray.NotifyExtensionDownloadFailed("yt-dlp or ffmpeg is missing.");
             return;
         }
@@ -2196,7 +2241,7 @@ public partial class MainWindow
             ? QualityPresets.DefaultVideoQuality(App.Settings)
             : App.Settings.AudioQuality);
 
-        AppendLog($"Extension request: {DownloadFormats.ToDisplayLabel(format)} / {request.Scope} — {request.Url}");
+        AppendLog($"Extension request: {DownloadFormats.ToDisplayLabel(format)} / {request.Scope} â€” {request.Url}");
 
         UrlBox.Text = request.Url;
         SelectFormat(DownloadFormats.ToTag(format));
@@ -2228,9 +2273,9 @@ public partial class MainWindow
         if (decision != DuplicateDecision.Proceed)
         {
             var skipReason = decision == DuplicateDecision.Skip
-                ? "Already downloaded — skipped."
-                : "Already in queue — skipped.";
-            StatusText.Text = $"Extension download skipped — {skipReason}";
+                ? "Already downloaded â€” skipped."
+                : "Already in queue â€” skipped.";
+            StatusText.Text = $"Extension download skipped â€” {skipReason}";
             _tray.NotifyExtensionDownloadSkipped(skipReason);
             return;
         }
@@ -2370,12 +2415,12 @@ public partial class MainWindow
             warning.Kind is DuplicateKind.InHistory or DuplicateKind.FileExists)
         {
             if (!silentSkip)
-                StatusText.Text = "Skipped — already downloaded.";
+                StatusText.Text = "Skipped â€” already downloaded.";
             AppendLog($"Skipped duplicate: {warning.Message.Replace('\n', ' ')}");
             return Task.FromResult(DuplicateDecision.Skip);
         }
 
-        // Extension / background: never block on a hidden MessageBox — honor the explicit click.
+        // Extension / background: never block on a hidden MessageBox â€” honor the explicit click.
         if (silentSkip || !IsVisible)
             return Task.FromResult(DuplicateDecision.Proceed);
 
@@ -2476,7 +2521,7 @@ public partial class MainWindow
             case MessageBoxResult.No:
                 if (freshJobs.Count == 0)
                 {
-                    StatusText.Text = "Skipped — already downloaded.";
+                    StatusText.Text = "Skipped â€” already downloaded.";
                     AppendLog($"Skipped {duplicateCount} already-downloaded track(s) in {collectionName}.");
                     return Task.FromResult<IReadOnlyList<DownloadJob>?>([]);
                 }
@@ -2638,16 +2683,16 @@ public partial class MainWindow
             var title = !string.IsNullOrWhiteSpace(job.CollectionTitle)
                 ? job.CollectionTitle
                 : $"{kindLabel} ({formatLabel})";
-            StatusText.Text = $"Downloading {title}…";
+            StatusText.Text = $"Downloading {title}â€¦";
         }
         else
-            StatusText.Text = $"{_activeDownloads.Count} downloads running…";
+            StatusText.Text = $"{_activeDownloads.Count} downloads runningâ€¦";
 
         if (!_sessionLogStarted)
         {
             LogBox.Clear();
             _logBoxLineCount = 0;
-            _logService.BeginSession($"{formatLabel} / {kindLabel} / {scopeLabel} — {job.Url}");
+            _logService.BeginSession($"{formatLabel} / {kindLabel} / {scopeLabel} â€” {job.Url}");
             AppendLog($"Saving logs to: {_logService.CurrentLogPath}");
             AppendLog($"Output folder: {job.OutputFolder}");
             AppendLog($"Quality: {QualityPresets.GetLabel(job.Format, job.Quality)}");
@@ -2660,7 +2705,7 @@ public partial class MainWindow
             foreach (var line in ToolDependencyService.DescribeToolsStatus(tools).Split(Environment.NewLine))
                 AppendLog(line);
             if (YouTubeUrlHelper.IsMusicAlbumOrPlaylist(job.Url) && !tools.DenoFound)
-                AppendLog("WARNING: YouTube Music album — install Deno (winget install DenoLand.Deno -e) and restart the app.");
+                AppendLog("WARNING: YouTube Music album â€” install Deno (winget install DenoLand.Deno -e) and restart the app.");
             _sessionLogStarted = true;
         }
         else
@@ -2746,7 +2791,7 @@ public partial class MainWindow
 
         primary.Cts.Cancel();
         primary.Downloader.Cancel();
-        StatusText.Text = "Cancelling…";
+        StatusText.Text = "Cancellingâ€¦";
     }
 
     private void PauseQueue_OnClick(object sender, RoutedEventArgs e) => ToggleQueuePaused();
@@ -2756,7 +2801,7 @@ public partial class MainWindow
         _queuePaused = !_queuePaused;
         UpdatePauseQueueButton();
         StatusText.Text = _queuePaused
-            ? "Queue paused — active downloads continue."
+            ? "Queue paused â€” active downloads continue."
             : "Queue resumed.";
         _queueWindow?.Refresh();
         if (!_queuePaused)
@@ -2879,8 +2924,8 @@ public partial class MainWindow
                 : $"{_queue.Count} waiting";
         else if (IsProcessing)
             QueueCountText.Text = _activeDownloads.Count > 1
-                ? $"{_activeDownloads.Count} downloading…"
-                : "Downloading…";
+                ? $"{_activeDownloads.Count} downloadingâ€¦"
+                : "Downloadingâ€¦";
         else
             QueueCountText.Text = _queuePaused ? "Paused" : "";
     }
@@ -2960,20 +3005,21 @@ public partial class MainWindow
             {
                 ProgressBar.Value = p;
                 ProgressBar.Visibility = Visibility.Visible;
+                var phaseLabel = !string.IsNullOrWhiteSpace(e.Status) ? e.Status : $"{p:0.#}%";
                 if (_activeDownloads.Count > 1)
                 {
-                    StatusText.Text = $"{_activeDownloads.Count} downloads running · {p:0.#}%";
+                    StatusText.Text = $"{_activeDownloads.Count} downloads running - {phaseLabel}";
                 }
                 else
                 {
-                    StatusText.Text = $"{label} · {p:0.#}%";
+                    StatusText.Text = $"{label} - {phaseLabel}";
                 }
             }
             else if (!string.IsNullOrWhiteSpace(e.Status))
             {
                 StatusText.Text = context.Job.Scope == DownloadScope.Playlist
                     ? label
-                    : $"{label} · {e.Status}";
+                    : $"{label} - {e.Status}";
             }
 
             UpdateDownloadMetricsUi();
@@ -3269,9 +3315,9 @@ public partial class MainWindow
             _statusTickTimer.Stop();
             _queueEtaCountdown.Reset();
             DownloadMetricsPanel.Visibility = Visibility.Collapsed;
-            MetricTrackText.Text = "—";
-            MetricFileEtaText.Text = "—";
-            MetricQueueEtaText.Text = "—";
+            MetricTrackText.Text = "â€”";
+            MetricFileEtaText.Text = "â€”";
+            MetricQueueEtaText.Text = "â€”";
             _displayCoverArtPath = null;
             _lastCoverVideoUrl = null;
             SetCoverImage(DownloadCoverImage, DownloadCoverPlaceholder, null);

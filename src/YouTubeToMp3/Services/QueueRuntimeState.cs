@@ -1,4 +1,4 @@
-namespace YouTubeToMp3.Services;
+﻿namespace YouTubeToMp3.Services;
 
 public sealed class QueueRuntimeState
 {
@@ -10,6 +10,7 @@ public sealed class QueueRuntimeState
     public int? PlaylistTotal { get; private set; }
     public string? CurrentTrackTitle { get; private set; }
     public string? CurrentVideoUrl { get; private set; }
+    public DownloadPhase Phase { get; private set; } = DownloadPhase.Starting;
 
     private DateTime? _fileEtaDeadlineUtc;
 
@@ -32,6 +33,21 @@ public sealed class QueueRuntimeState
 
     public void ApplyProgress(DownloadProgressEventArgs e)
     {
+        if (e.Phase != Phase && e.Phase != DownloadPhase.Starting)
+        {
+            // why: entering merge/cover must not keep a stale 100% download bar
+            if (Phase == DownloadPhase.Downloading &&
+                e.Phase is DownloadPhase.Merging or DownloadPhase.EmbeddingCover)
+            {
+                Percent = e.Percent ?? 0;
+                Eta = null;
+                _fileEtaDeadlineUtc = null;
+                Speed = null;
+            }
+
+            Phase = e.Phase;
+        }
+
         if (e.Percent is { } p)
             Percent = p;
         if (!string.IsNullOrWhiteSpace(e.Eta) && !string.Equals(e.Eta, Eta, StringComparison.Ordinal))
@@ -54,6 +70,7 @@ public sealed class QueueRuntimeState
                 Speed = null;
                 CurrentTrackTitle = null;
                 CurrentVideoUrl = null;
+                Phase = DownloadPhase.Starting;
             }
 
             PlaylistIndex = e.PlaylistIndex;
@@ -91,6 +108,7 @@ public sealed class QueueRuntimeState
         PlaylistTotal = null;
         CurrentTrackTitle = null;
         CurrentVideoUrl = null;
+        Phase = DownloadPhase.Starting;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 }

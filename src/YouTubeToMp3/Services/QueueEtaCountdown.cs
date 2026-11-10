@@ -1,13 +1,18 @@
-namespace YouTubeToMp3.Services;
+﻿namespace YouTubeToMp3.Services;
 
 /// <summary>Smooth countdown between yt-dlp ETA updates.</summary>
 public sealed class QueueEtaCountdown
 {
+    private readonly EtaSmoother _smoother = new(alpha: 0.16, maxJumpSeconds: 10);
     private DateTime? _deadlineUtc;
 
-    public void Reset() => _deadlineUtc = null;
+    public void Reset()
+    {
+        _deadlineUtc = null;
+        _smoother.Reset();
+    }
 
-    public void Sync(TimeSpan? freshEstimate, double resyncThresholdSeconds = 4)
+    public void Sync(TimeSpan? freshEstimate, double resyncThresholdSeconds = 10)
     {
         if (freshEstimate is null || freshEstimate <= TimeSpan.Zero)
         {
@@ -15,10 +20,11 @@ public sealed class QueueEtaCountdown
             return;
         }
 
+        var smoothed = _smoother.Observe(freshEstimate) ?? freshEstimate.Value;
         var now = DateTime.UtcNow;
         if (_deadlineUtc is null)
         {
-            _deadlineUtc = now + freshEstimate.Value;
+            _deadlineUtc = now + smoothed;
             return;
         }
 
@@ -26,8 +32,8 @@ public sealed class QueueEtaCountdown
         if (current < TimeSpan.Zero)
             current = TimeSpan.Zero;
 
-        if (Math.Abs((current - freshEstimate.Value).TotalSeconds) > resyncThresholdSeconds)
-            _deadlineUtc = now + freshEstimate.Value;
+        if (Math.Abs((current - smoothed).TotalSeconds) > resyncThresholdSeconds)
+            _deadlineUtc = now + smoothed;
     }
 
     public TimeSpan? Remaining
