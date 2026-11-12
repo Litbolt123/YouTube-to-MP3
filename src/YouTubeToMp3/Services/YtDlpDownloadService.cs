@@ -224,14 +224,11 @@ public sealed class YtDlpDownloadService : IDisposable
             return;
         }
 
-        var success = _process.ExitCode == 0;
         var combined = string.Join(Environment.NewLine, allLines);
         var destMatch = DestinationRegex.Match(combined);
         var stagingOutputFile = destMatch.Success ? destMatch.Groups[1].Value.Trim() : stagingDir;
         var stagedMedia = DownloadStagingService.ListMediaFiles(stagingDir);
-        var partialSuccess = !success && stagedMedia.Count > 0;
-        if (partialSuccess)
-            success = true;
+        var success = IsSuccessfulDownload(_process.ExitCode, stagedMedia.Count, out var partialSuccess, out var emptyOutputError);
 
         var outputFile = stagedMedia.Count > 0
             ? DownloadStagingService.MapToFinalPath(stagingDir, outputFolder, stagedMedia[^1])
@@ -247,7 +244,7 @@ public sealed class YtDlpDownloadService : IDisposable
                 Success = false,
                 ExitCode = _process.ExitCode,
                 OutputPath = outputFile,
-                ErrorMessage = BuildErrorMessage(stderr, _process.ExitCode, format),
+                ErrorMessage = emptyOutputError ?? BuildErrorMessage(stderr, _process.ExitCode, format),
                 Format = format,
                 Scope = scope,
                 ContentKind = contentKind,
@@ -412,7 +409,30 @@ public sealed class YtDlpDownloadService : IDisposable
             writtenFiles.Add(path);
     }
 
-    private static string BuildArguments(
+    internal static void AppendDurationPrintArgs(StringBuilder sb)
+    {
+        sb.Append("--no-simulate --print \"DURATION:%(duration)s\" ");
+    }
+
+    internal static bool IsSuccessfulDownload(
+        int exitCode,
+        int stagedMediaCount,
+        out bool partialSuccess,
+        out string? emptyOutputError)
+    {
+        emptyOutputError = null;
+        partialSuccess = exitCode != 0 && stagedMediaCount > 0;
+        if (stagedMediaCount == 0)
+        {
+            if (exitCode == 0)
+                emptyOutputError = "Download finished without producing a file. The video was not saved.";
+            return false;
+        }
+
+        return exitCode == 0 || partialSuccess;
+    }
+
+    internal static string BuildArguments(
         string url,
         string outputTemplate,
         DownloadFormat format,
@@ -487,8 +507,8 @@ public sealed class YtDlpDownloadService : IDisposable
             sb.Append("--embed-thumbnail --convert-thumbnails jpg ");
         }
 
-        // why: duration lets merge/cover progress bars map ffmpeg time= to a real percent
-        sb.Append("--print \"DURATION:%(duration)s\" ");
+        // why: --print DURATION feeds merge/cover progress; --no-simulate is required because --print would otherwise skip the download
+        AppendDurationPrintArgs(sb);
         sb.Append($"\"{url}\"");
         return sb.ToString();
     }

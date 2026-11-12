@@ -34,5 +34,9 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\scripts\update-windows-shortcuts.ps1&quot; -SourceDir &quot;$(_ShortcutSourceDir)&quot; -SkipProcessStop"
           IgnoreExitCode="false" />
   </Target>
-
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>YouTubeToMp3.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>
