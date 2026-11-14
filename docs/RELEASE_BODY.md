@@ -1,17 +1,12 @@
-## YouTube Downloader 2.1.1
+## YouTube Downloader 2.1.2
 
 ### Highlights
-- **Real progress for the last steps:** Merging and cover-art embedding now show real progress bars, instead of a stuck or guessed bar.
-- **Smoother time estimates:** Remaining-time estimates are steadier and jump around less.
-- **Simpler main screen:** Everyday controls stay up front, with less-used options in an Advanced section.
-- **Better music vs video detection:** The app is better at telling music and regular videos apart.
-- **Long video fixes:** Long downloads no longer freeze the window, and MP4 cover art embeds more reliably.
-- **Browser extension:** The companion extension in this release is updated alongside the app.
+- **Fixed downloads that said "done" with no file:** Some downloads finished instantly and were marked done, but no file was saved. The app now really downloads the video, and only marks a job done once the file actually exists.
 
 ### Install
-Download **YouTubeToMp3-Setup-2.1.1.exe** below. Settings in `%LocalAppData%\YouTubeToMp3` are preserved.
+Download **YouTubeToMp3-Setup-2.1.2.exe** below, close the app, and run the installer over your current version. Settings in `%LocalAppData%\YouTubeToMp3` are preserved.
 
 ### Verify
-1. Settings → About shows **2.1.1**.
-2. Download a long video or a track with cover art — the merge and cover-art steps should show real progress.
+1. Settings → About shows **2.1.2**.
+2. Download any video or track and confirm the file shows up in your output folder.
 3. Settings → Updates reports up to date after install.
