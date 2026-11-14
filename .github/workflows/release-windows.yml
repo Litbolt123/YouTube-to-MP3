@@ -80,6 +80,7 @@ jobs:
         working-directory: installer
         run: |
           $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          & ..\scripts\write-version-inc.ps1 -Version ${{ steps.version.outputs.app_version }}
           & $iscc /DAppVersion=${{ steps.version.outputs.app_version }} .\YouTubeToMp3.iss
         shell: pwsh
 
