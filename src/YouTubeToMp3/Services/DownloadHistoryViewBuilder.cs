@@ -169,6 +169,15 @@ public static class DownloadHistoryViewBuilder
     {
         if (Directory.Exists(path))
         {
+            if (DownloadFormats.IsVideo(format))
+            {
+                return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                    .Count(file =>
+                        file.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                        file.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
+                        file.EndsWith(".webm", StringComparison.OrdinalIgnoreCase));
+            }
+
             var ext = DownloadFormats.FileExtension(format);
             return Directory.EnumerateFiles(path, "*" + ext, SearchOption.AllDirectories).Count();
         }

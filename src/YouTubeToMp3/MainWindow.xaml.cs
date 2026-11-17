@@ -212,6 +212,8 @@ public partial class MainWindow
     private void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
     {
         RefreshFolderDisplay();
+        var windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        ScreenResolutionService.CaptureFromUiThread(windowHandle);
         LogPathHint.Text = $"Logs folder: {AppPaths.LogsDirectory}";
         ApplySettingsToMainUi();
         SelectFormat(App.Settings.PreferredFormat);
@@ -3074,6 +3076,8 @@ public partial class MainWindow
                     }
                 }
                 AppendLog("Done!");
+                if (!string.IsNullOrWhiteSpace(e.ResultSummary))
+                    AppendLog(e.ResultSummary);
                 if (!string.IsNullOrWhiteSpace(e.ErrorMessage))
                     AppendLog(e.ErrorMessage);
                 RecordHistory(e, context.Job);
@@ -3262,6 +3266,8 @@ public partial class MainWindow
         StatusText.Text = "Done!";
         var scopeText = DownloadScopeLabels.ForDonePanel(job, e.Scope, e.Format, e.ContentKind);
         DonePathText.Text = $"Saved {kindLabel} {formatLabel} ({scopeText}) to:\n{e.OutputPath}";
+        if (!string.IsNullOrWhiteSpace(e.ResultSummary))
+            DonePathText.Text += "\n" + e.ResultSummary;
         DonePathText.Visibility = Visibility.Visible;
         DoneActions.Visibility = Visibility.Visible;
         if (ImportToMusicHubButton is not null)

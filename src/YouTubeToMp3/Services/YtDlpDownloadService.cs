@@ -28,6 +28,7 @@ public sealed class DownloadCompletedEventArgs : EventArgs
     public DownloadScope Scope { get; init; }
     public ContentKind ContentKind { get; init; }
     public string OutputFolder { get; init; } = "";
+    public string? ResultSummary { get; init; }
 }
 
 public sealed class YtDlpDownloadService : IDisposable
@@ -190,6 +191,15 @@ public sealed class YtDlpDownloadService : IDisposable
         if (!_process.Start())
             throw new InvalidOperationException("Could not start yt-dlp.");
 
+        try
+        {
+            _process.PriorityClass = ProcessPriorityClass.BelowNormal;
+        }
+        catch
+        {
+            /* priority is best-effort */
+        }
+
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
@@ -272,7 +282,7 @@ public sealed class YtDlpDownloadService : IDisposable
                 {
                     Line = useCustomCover ? "Embedding custom cover art..." : "Embedding cover art...",
                     Status = useCustomCover ? "Embedding custom cover art..." : "Embedding cover art...",
-                    Percent = 0,
+                    Percent = JobProgress.ToOverall(DownloadPhase.EmbeddingCover, 0),
                     Phase = DownloadPhase.EmbeddingCover,
                 });
 
@@ -319,7 +329,7 @@ public sealed class YtDlpDownloadService : IDisposable
                             Status = useCustomCover
                                 ? $"Embedding custom cover art... {pct:0.#}%"
                                 : $"Embedding cover art... {pct:0.#}%",
-                            Percent = pct,
+                            Percent = JobProgress.ToOverall(DownloadPhase.EmbeddingCover, pct),
                             Phase = DownloadPhase.EmbeddingCover,
                             Eta = smoothed is { } s ? QueueDisplayHelper.FormatDuration(s) : null,
                         });
@@ -330,7 +340,9 @@ public sealed class YtDlpDownloadService : IDisposable
                     {
                         Line = $"Embedding cover art ({embedded}/{targets.Count})...",
                         Status = $"Embedding cover art ({embedded}/{targets.Count})...",
-                        Percent = 100.0 * embedded / Math.Max(1, targets.Count),
+                        Percent = JobProgress.ToOverall(
+                            DownloadPhase.EmbeddingCover,
+                            100.0 * embedded / Math.Max(1, targets.Count)),
                         Phase = DownloadPhase.EmbeddingCover,
                     });
                 }
@@ -379,6 +391,63 @@ public sealed class YtDlpDownloadService : IDisposable
             DownloadStagingService.TryDeleteStagingDirectory(stagingDir);
         }
 
+        string? resultSummary = null;
+        if (success)
+        {
+            _phase = DownloadPhase.Finishing;
+            _etaSmoother.SetPhase(DownloadPhase.Finishing);
+            Progress?.Invoke(this, new DownloadProgressEventArgs
+            {
+                Line = "Finishing...",
+                Status = "Finishing...",
+                Percent = JobProgress.ToOverall(DownloadPhase.Finishing, 0),
+                Phase = DownloadPhase.Finishing,
+            });
+
+            try
+            {
+                var files = committedFiles.Count > 0
+                    ? committedFiles
+                    : File.Exists(outputFile)
+                        ? new[] { outputFile }
+                        : Array.Empty<string>();
+                var qualityMode = VideoQualityModes.Parse(App.Settings.VideoQualityMode);
+                int? requestedHeight = DownloadFormats.IsVideo(format)
+                    ? QualityPresets.ResolveVideoHeightCap(audioQuality)
+                    : null;
+                resultSummary = await MediaProbeResult.DescribeFilesAsync(
+                    tools.FfmpegPath,
+                    files,
+                    qualityMode,
+                    requestedHeight,
+                    _cts?.Token ?? CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                resultSummary ??= "Saved, but the file check was cancelled.";
+            }
+            catch
+            {
+                resultSummary ??= "Saved, but the file check failed.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(resultSummary))
+            {
+                foreach (var line in resultSummary.Split(Environment.NewLine))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;
+                    Progress?.Invoke(this, new DownloadProgressEventArgs
+                    {
+                        Line = line,
+                        Status = line,
+                        Percent = JobProgress.ToOverall(DownloadPhase.Finishing, 100),
+                        Phase = DownloadPhase.Finishing,
+                    });
+                }
+            }
+        }
+
         Completed?.Invoke(this, new DownloadCompletedEventArgs
         {
             Success = success,
@@ -391,6 +460,7 @@ public sealed class YtDlpDownloadService : IDisposable
             Scope = scope,
             ContentKind = contentKind,
             OutputFolder = outputFolder,
+            ResultSummary = resultSummary,
         });
     }
 
@@ -412,6 +482,11 @@ public sealed class YtDlpDownloadService : IDisposable
     internal static void AppendDurationPrintArgs(StringBuilder sb)
     {
         sb.Append("--no-simulate --print \"DURATION:%(duration)s\" ");
+    }
+
+    internal static void AppendFormatPrintArgs(StringBuilder sb)
+    {
+        sb.Append("--print \"SELECTED:%(format_id)s|%(vcodec)s|%(acodec)s|%(height)s|%(fps)s\" ");
     }
 
     internal static bool IsSuccessfulDownload(
@@ -443,8 +518,10 @@ public sealed class YtDlpDownloadService : IDisposable
         ToolCheckResult tools,
         TrackMetadataOverride? metadataOverride,
         int concurrentFragments,
-        bool useDownloadArchive)
+        bool useDownloadArchive,
+        VideoQualityMode? videoQualityMode = null)
     {
+        var mode = videoQualityMode ?? VideoQualityModes.Parse(App.Settings.VideoQualityMode);
         var sb = new StringBuilder();
         sb.Append("--newline --progress --ignore-errors --force-overwrites ");
         sb.Append("--socket-timeout 20 ");
@@ -494,12 +571,7 @@ public sealed class YtDlpDownloadService : IDisposable
         }
         else
         {
-            var formatSelector = QualityPresets.GetMp4FormatSelector(audioQuality, App.Settings.MatchVideoToScreen);
-            sb.Append($"-f \"{formatSelector}\" ");
-            sb.Append("--merge-output-format mp4 ");
-            sb.Append("--remux-video mp4 ");
-            // Re-encode to AAC if only Opus audio is available â€” Windows Media Player cannot play Opus in MP4.
-            sb.Append("--postprocessor-args \"Merger+ffmpeg_o:-c:a aac -b:a 192k -progress pipe:2\" ");
+            VideoDownloadPlan.Create(mode, audioQuality).AppendYtDlpArgs(sb);
         }
 
         if (embedThumbnail && DownloadFormats.IsVideo(format))
@@ -509,6 +581,7 @@ public sealed class YtDlpDownloadService : IDisposable
 
         // why: --print DURATION feeds merge/cover progress; --no-simulate is required because --print would otherwise skip the download
         AppendDurationPrintArgs(sb);
+        AppendFormatPrintArgs(sb);
         sb.Append($"\"{url}\"");
         return sb.ToString();
     }
@@ -718,6 +791,7 @@ public sealed class YtDlpDownloadService : IDisposable
         }
 
         string? status = null;
+        var shownPercent = percent is { } rawPhase ? JobProgress.ToOverall(_phase, rawPhase) : (double?)null;
         if (_phase == DownloadPhase.Merging || isMergeLine)
         {
             status = DownloadFormats.IsAudio(format)
@@ -727,18 +801,18 @@ public sealed class YtDlpDownloadService : IDisposable
                 : (line.Contains("thumbnail", StringComparison.OrdinalIgnoreCase)
                     ? "Embedding cover art..."
                     : "Merging video...");
-            if (percent is { } mergePct)
+            if (shownPercent is { } mergePct)
                 status = $"{status.TrimEnd('.')} {mergePct:0.#}%";
         }
         else if (playlistIndex is not null && playlistTotal is not null)
-            status = eta is not null && percent is not null
-                ? $"Item {playlistIndex}/{playlistTotal} Â· {percent:0.#}% Â· ETA {eta}"
+            status = eta is not null && shownPercent is not null
+                ? $"Item {playlistIndex}/{playlistTotal} Â· {shownPercent:0.#}% Â· ETA {eta}"
                 : $"Downloading playlist item {playlistIndex}/{playlistTotal}...";
         else if (line.Contains("Downloading", StringComparison.OrdinalIgnoreCase))
             status = eta is not null ? $"Downloading... ETA {eta}" : "Downloading...";
         else if (line.StartsWith("[download]", StringComparison.Ordinal))
-            status = eta is not null && percent is not null
-                ? $"Downloading... {percent:0.#}% Â· ETA {eta}"
+            status = eta is not null && shownPercent is not null
+                ? $"Downloading... {shownPercent:0.#}% Â· ETA {eta}"
                 : line;
 
         TimeSpan? rawEta = QueueDisplayHelper.ParseEta(eta);
@@ -771,7 +845,7 @@ public sealed class YtDlpDownloadService : IDisposable
         Progress?.Invoke(this, new DownloadProgressEventArgs
         {
             Line = line,
-            Percent = percent,
+            Percent = shownPercent,
             Eta = etaLabel,
             Speed = speed,
             PlaylistIndex = playlistIndex,

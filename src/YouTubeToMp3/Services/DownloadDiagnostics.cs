@@ -2,6 +2,13 @@ using System.Text.RegularExpressions;
 
 namespace YouTubeToMp3.Services;
 
+public readonly record struct SelectedFormatInfo(
+    string FormatId,
+    string VideoCodec,
+    string AudioCodec,
+    string Height,
+    string Fps);
+
 /// <summary>Structured diagnostic lines for download logs (grep for "DIAG:").</summary>
 public static class DownloadDiagnostics
 {
@@ -43,8 +50,16 @@ public static class DownloadDiagnostics
             ? $"{Prefix} Deno: {tools.DenoPath} (YouTube JS enabled)"
             : $"{Prefix} Deno: not on PATH — YouTube may fail without it";
 
+        var mode = VideoQualityModes.Parse(App.Settings.VideoQualityMode);
+        var plan = DownloadFormats.IsVideo(format) ? VideoDownloadPlan.Create(mode, quality) : null;
         yield return $"{Prefix} format={DownloadFormats.ToDisplayLabel(format)} scope={scope} content={contentKind}";
         yield return $"{Prefix} quality={QualityPresets.GetLabel(format, quality)} ({quality})";
+        if (plan is not null)
+        {
+            yield return $"{Prefix} quality_mode={VideoQualityModes.ToTag(plan.Mode)} container={plan.Container}";
+            yield return $"{Prefix} merge_ffmpeg={plan.MergerArgs}";
+            yield return $"{Prefix} fallback={plan.FallbackNote}";
+        }
         yield return $"{Prefix} concurrent_fragments={concurrentFragments} download_archive={useDownloadArchive} embed_thumbnail={embedThumbnail}";
 
         if (IsYouTubeUrl(url))
@@ -63,7 +78,35 @@ public static class DownloadDiagnostics
     public static string DescribeFormatSelector(DownloadFormat format, int quality) =>
         DownloadFormats.IsAudio(format)
             ? AudioExtractArgs.GetFormatSelector(format)
-            : QualityPresets.GetMp4FormatSelector(quality, App.Settings.MatchVideoToScreen);
+            : VideoDownloadPlan.Create(VideoQualityModes.Parse(App.Settings.VideoQualityMode), quality).FormatSelector;
+
+    public static bool TryParseSelectedFormat(string line, out SelectedFormatInfo info)
+    {
+        info = default;
+        if (string.IsNullOrWhiteSpace(line))
+            return false;
+
+        const string marker = "SELECTED:";
+        var index = line.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            return false;
+
+        var payload = line[(index + marker.Length)..].Trim();
+        var parts = payload.Split('|');
+        if (parts.Length < 5 || string.IsNullOrWhiteSpace(parts[0]))
+            return false;
+
+        info = new SelectedFormatInfo(
+            parts[0].Trim(),
+            parts[1].Trim(),
+            parts[2].Trim(),
+            parts[3].Trim(),
+            parts[4].Trim());
+        return true;
+    }
+
+    public static string FormatSelectedLine(SelectedFormatInfo info) =>
+        $"{Prefix} selected_format id={info.FormatId} vcodec={info.VideoCodec} acodec={info.AudioCodec} height={info.Height} fps={info.Fps}";
 
     public static IEnumerable<string> FormatCommand(string exePath, string arguments)
     {
@@ -86,6 +129,12 @@ public static class DownloadDiagnostics
         {
             var match = FormatInfoRegex.Match(formatLine);
             yield return $"{Prefix} selected_formats={match.Groups[1].Value.Trim()}";
+        }
+
+        foreach (var line in lines)
+        {
+            if (TryParseSelectedFormat(line, out var selected))
+                yield return FormatSelectedLine(selected);
         }
 
         foreach (var warning in SummarizeWarnings(combined))

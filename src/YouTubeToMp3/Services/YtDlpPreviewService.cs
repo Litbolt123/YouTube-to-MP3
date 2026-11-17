@@ -27,7 +27,9 @@ public static class YtDlpPreviewService
             if (!string.IsNullOrWhiteSpace(baseName))
             {
                 var sanitized = OutputTemplateBuilder.SanitizeFileName(baseName);
-                var ext = DownloadFormats.FileExtension(format);
+                var ext = DownloadFormats.IsVideo(format)
+                    ? "." + VideoDownloadPlan.Create(VideoQualityModes.Parse(App.Settings.VideoQualityMode), 0).Container
+                    : DownloadFormats.FileExtension(format);
                 var fileName = sanitized + ext;
                 return new PreviewResult
                 {
