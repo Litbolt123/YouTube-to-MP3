@@ -1,2 +1,2 @@
 ; Auto-generated ??? edit Directory.Build.props, then run build-installer.ps1 or bump-version.ps1.
-#define AppVersion "2.1.3"
+#define AppVersion "2.2.0"
