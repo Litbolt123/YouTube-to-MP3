@@ -197,7 +197,6 @@ public sealed class YtDlpDownloadService : IDisposable
         }
         catch
         {
-            /* priority is best-effort */
         }
 
         _process.BeginOutputReadLine();

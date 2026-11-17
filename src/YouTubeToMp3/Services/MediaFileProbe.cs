@@ -178,7 +178,6 @@ public sealed record MediaProbeResult(
             }
             catch
             {
-                /* ignore bad PATH entries */
             }
         }
 
@@ -212,7 +211,6 @@ public sealed record MediaProbeResult(
         }
         catch
         {
-            /* priority is best-effort */
         }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
