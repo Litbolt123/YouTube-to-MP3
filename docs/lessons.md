@@ -122,3 +122,11 @@ Also read `GitHub projects\docs\app-development-pipeline.md` section 10.
 - **Worked:** Second content script `world: "MAIN"` posts slim `streamingData` via `postMessage`. Isolated script listens and fills the button/panel.
 - **Verify:** Navigate watch → watch without full reload; quality label still updates.
 - **Do not regress:** Do not assume content scripts share the page's `window` object.
+
+## Video playback quality — H.264 MP4 vs VP9, physical pixels (2026-11-17)
+
+- **Symptom:** 1080p60 looks soft or tears in Movies & TV. Match this screen picks 720p on a 2560x1600 panel at 150% scaling. Every merge re-encodes audio. The log stopped showing the chosen format. Some livestreams are only ~650–800 kb/s at the source.
+- **Failed:** Muxing VP9 into MP4. Using `Screen.Bounds` (logical 1707x1067 snaps to 720p). Merger args `-c:a aac` on every video. Treating the download percent as the whole job.
+- **Worked:** Settings **Quality mode**. Compatible (default) prefers H.264 (`avc1`) + m4a in MP4 at the chosen height and `fps<=60`, then H.264 without the fps cap. Best prefers VP9 then AV1 and saves MKV. Never put VP9/AV1 in MP4. Physical pixels come from `EnumDisplaySettings` (this panel is 2560x1600, 1600p-class, download cap 1440p). Merge is `-c:v copy` and `-c:a copy` unless opus/vorbis must go into MP4. Log `SELECTED:` format id and codecs, then ffprobe (resolution, fps, codec, container, bitrate) and say when the source is under 1000 kb/s. Overall percent: download 0–75, merge 75–95, cover 95–99, finish 99–100.
+- **Verify:** `dotnet test` in the `YT-quality-modes` worktree — 47 passed. `EnumDisplaySettings` for `\\.\DISPLAY1` is 2560x1600 while `Screen.Bounds` is 1707x1067.
+- **Do not regress:** Do not remux VP9/AV1 into MP4. Do not snap `Screen.Bounds` for match-screen. Do not pass `-c:a aac` on every merge. Do not append an audio-only `/best` branch. Do not re-add `--check-formats`.

@@ -1,5 +1,12 @@
 # Context summary
 
+## 2026-11-17 — Quality mode, physical screen pixels, copy-merge
+
+- **Ask:** Work only in `C:\Users\Augus\Projects\_worktrees\YT-quality-modes` (`fix/yt-quality-modes`, base `82b034f`). Compatible vs Best quality mode, DPI-aware screen match, copy streams on merge, restore format logging plus ffprobe, overall progress, unit tests, local commit. No push, no installer, no install over the app.
+- **Done:** Settings **Quality mode** (default Compatible). Compatible format is H.264 + m4a in MP4; Best is VP9 then AV1 in MKV. VP9/AV1 are not muxed into MP4. Screen height uses `EnumDisplaySettings` physical pixels (2560x1600 at 150% is 1600p-class, cap 1440p, not the logical 1067 → 720p). Merger is `-c:v copy -c:a copy`, and `-c:a aac` only for opus/vorbis into MP4. Log prints `SELECTED:` format id and codecs, then ffprobe resolution/fps/codec/container/bitrate, and a low-source line under 1000 kb/s. Job percent spans download, merge, cover, and finish.
+- **Verify:** `dotnet test` — 47 passed, 0 failed.
+- **Not done:** August has not playtested a 1080p60 download in Movies & TV. No release and no install.
+
 ## 2026-09-16 — Playtest: quality stays in the open panel; check after save
 
 - **Playtest:** Screenshot showed `Download 1080p60 ✓` on the watch-page pill plus quality in the menu.

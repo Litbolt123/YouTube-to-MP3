@@ -22,6 +22,8 @@ public sealed class AppSettings
     /// <summary>When true, "Best" / unset quality is capped to this PC's screen so 1080p displays don't get 4K.</summary>
     public bool MatchVideoToScreen { get; set; } = true;
 
+    public string VideoQualityMode { get; set; } = "compatible";
+
     /// <summary>mp3, m4a, opus, flac, wav, or mp4</summary>
     public string PreferredFormat { get; set; } = "mp3";
 
@@ -173,6 +175,8 @@ public static class AppSettingsService
 
         if (!string.Equals(settings.ExtensionButtonAfterDownload, "resetAfterSeconds", StringComparison.OrdinalIgnoreCase))
             settings.ExtensionButtonAfterDownload = "keepUntilFileGone";
+
+        settings.VideoQualityMode = VideoQualityModes.ToTag(VideoQualityModes.Parse(settings.VideoQualityMode));
     }
 
     public static void EnsureExtensionToken(AppSettings settings)

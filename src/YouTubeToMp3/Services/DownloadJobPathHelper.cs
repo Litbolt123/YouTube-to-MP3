@@ -7,7 +7,10 @@ public static class DownloadJobPathHelper
         if (string.IsNullOrWhiteSpace(job.CustomFileName))
             return null;
 
-        var ext = DownloadFormats.FileExtension(job.Format);
+        var ext = DownloadFormats.IsVideo(job.Format)
+            ? VideoDownloadPlan.Create(VideoQualityModes.Parse(App.Settings.VideoQualityMode), job.Quality).Container
+            : DownloadFormats.ToTag(job.Format);
+        ext = "." + ext;
 
         if (!string.IsNullOrWhiteSpace(job.MusicArtistFolder) &&
             !string.IsNullOrWhiteSpace(job.MusicAlbumFolder))

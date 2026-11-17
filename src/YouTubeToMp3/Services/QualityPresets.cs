@@ -22,10 +22,9 @@ public static class QualityPresets
             ];
         }
 
-        var screen = ScreenResolutionService.PreferredVideoHeight;
         return
         [
-            ($"Match this screen ({ScreenResolutionService.LabelForHeight(screen)})", -1),
+            (ScreenResolutionService.MatchScreenMenuLabel(), -1),
             ("Best available (highest this video has)", 0),
             ("Up to 4K (2160p)", 1),
             ("Up to 1440p", 2),
@@ -81,14 +80,8 @@ public static class QualityPresets
     public static string GetMp4FormatSelector(int quality, bool matchScreen = true)
     {
         _ = matchScreen;
-        var cap = ResolveVideoHeightCap(quality);
-        var heightFilter = cap is int h ? $"[height<={h}]" : "";
-        // Prefer VP9/H.264 before AV1. Format 400 (AV1 1440p) often hangs while "Testing format".
-        return
-            $"bestvideo{heightFilter}[vcodec!*=av01]+bestaudio[ext=m4a]/" +
-            $"bestvideo{heightFilter}[vcodec!*=av01]+bestaudio/" +
-            $"bestvideo{heightFilter}+bestaudio[ext=m4a]/" +
-            $"bestvideo{heightFilter}+bestaudio";
+        var mode = VideoQualityModes.Parse(App.Settings.VideoQualityMode);
+        return VideoDownloadPlan.Create(mode, quality).FormatSelector;
     }
 
     public static void ApplyToCombo(ComboBox combo, DownloadFormat format, int selectedValue)
@@ -142,7 +135,7 @@ public static class QualityPresets
 
         return quality switch
         {
-            MatchScreenQuality => $"Match this screen ({ScreenResolutionService.LabelForHeight(ScreenResolutionService.PreferredVideoHeight)})",
+            MatchScreenQuality => ScreenResolutionService.MatchScreenMenuLabel(),
             0 => DownloadFormats.IsVideo(format) ? "Best available" : "Best",
             _ when quality >= 144 => ScreenResolutionService.LabelForHeight(quality),
             _ => quality.ToString(CultureInfo.InvariantCulture),

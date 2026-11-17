@@ -30,6 +30,7 @@ public partial class SettingsWindow
         MusicFolderBox.Text = s.MusicOutputFolder;
         VideosFolderBox.Text = s.VideosOutputFolder;
         SelectFormat(s.PreferredFormat);
+        SelectVideoQualityMode(s.VideoQualityMode);
         MatchVideoToScreenBox.IsChecked = s.MatchVideoToScreen;
         EmbedThumbnailBox.IsChecked = s.EmbedThumbnail;
         AlwaysAskCoverArtBox.IsChecked = s.AlwaysAskCoverArt;
@@ -104,6 +105,29 @@ public partial class SettingsWindow
     }
 
     private int GetSelectedQuality() => QualityPresets.GetSelectedQuality(QualityCombo);
+
+    private void SelectVideoQualityMode(string? mode)
+    {
+        var tag = VideoQualityModes.ToTag(VideoQualityModes.Parse(mode));
+        foreach (var item in VideoQualityModeCombo.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is string itemTag && string.Equals(itemTag, tag, StringComparison.OrdinalIgnoreCase))
+            {
+                VideoQualityModeCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (VideoQualityModeCombo.Items.Count > 0)
+            VideoQualityModeCombo.SelectedIndex = 0;
+    }
+
+    private string GetSelectedVideoQualityMode()
+    {
+        if (VideoQualityModeCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            return VideoQualityModes.ToTag(VideoQualityModes.Parse(tag));
+        return "compatible";
+    }
 
     private void SelectBackgroundRunMode(BackgroundRunMode mode)
     {
@@ -423,6 +447,7 @@ public partial class SettingsWindow
             AudioQuality = DownloadFormats.IsVideo(format) ? App.Settings.AudioQuality : quality,
             VideoQuality = DownloadFormats.IsVideo(format) ? quality : App.Settings.VideoQuality,
             MatchVideoToScreen = MatchVideoToScreenBox.IsChecked == true,
+            VideoQualityMode = GetSelectedVideoQualityMode(),
             EmbedThumbnail = EmbedThumbnailBox.IsChecked == true,
             AlwaysAskCoverArt = AlwaysAskCoverArtBox.IsChecked == true,
             ReviewAlbumTracksBeforeDownload = ReviewAlbumTracksBox.IsChecked == true,

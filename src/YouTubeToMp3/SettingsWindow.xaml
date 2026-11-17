@@ -39,6 +39,15 @@
                         <TextBlock Text="Default quality" Width="120" Style="{DynamicResource DashSettingLabel}"/>
                         <ComboBox x:Name="QualityCombo" Width="280" Style="{DynamicResource DashComboBox}" DisplayMemberPath="Content"/>
                     </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="Quality mode" Width="120" Style="{DynamicResource DashSettingLabel}"/>
+                        <ComboBox x:Name="VideoQualityModeCombo" Width="280" Style="{DynamicResource DashComboBox}">
+                            <ComboBoxItem Tag="compatible" Content="Compatible (H.264 MP4, smooth playback)"/>
+                            <ComboBoxItem Tag="best" Content="Best (VP9/AV1 in MKV)"/>
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBlock Style="{DynamicResource DashHintText}" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Text="Compatible prefers H.264 and AAC in an MP4 so Movies and TV does not stutter. Best keeps the highest VP9 or AV1 and saves MKV. VP9 and AV1 are never put in an MP4."/>
                     <CheckBox x:Name="MatchVideoToScreenBox" Style="{DynamicResource DashSimpleCheckBox}" Margin="0,0,0,8"
                               Content="Match video downloads to this screen (don't fetch 4K on a 1080p display)"
                               ToolTip="When default quality is Best or Match screen, cap MP4 height to this monitor. Pick a specific resolution in the quality list to override."/>
